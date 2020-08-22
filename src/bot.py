@@ -56,20 +56,21 @@ class MyBot(BaseAgent):
         self.renderer.draw_string_3d(car_location, 1, 1, f'Speed: {car_velocity.length():.1f}', self.renderer.white())
         self.renderer.draw_rect_3d(target_location, 8, 8, True, self.renderer.cyan(), centered=True)
 
-        if 750 < car_velocity.length() < 800:
-            # We'll do a front flip if the car is moving at a certain speed.
-            return self.begin_front_flip(packet)
+        # if 750 < car_velocity.length() < 800:
+        #     # We'll do a front flip if the car is moving at a certain speed.
+        #     return self.begin_front_flip(packet)
 
         controls = SimpleControllerState()
         controls.steer = steer_toward_target(my_car, target_location)
         controls.throttle = 1.0
+        # controls.boost = True
         # You can set more controls if you want, like controls.boost.
 
         return controls
 
     def begin_front_flip(self, packet):
         # Send some quickchat just for fun
-        self.send_quick_chat(team_only=False, quick_chat=QuickChatSelection.Information_IGotIt)
+        # self.send_quick_chat(team_only=False, quick_chat=QuickChatSelection.Information_IGotIt)
 
         # Do a front flip. We will be committed to this for a few seconds and the bot will ignore other
         # logic during that time because we are setting the active_sequence.

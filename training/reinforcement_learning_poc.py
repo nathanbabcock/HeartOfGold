@@ -9,6 +9,7 @@ from rlbottraining.rng import SeededRandomNumberGenerator
 from rlbottraining.match_configs import make_empty_match_config
 from rlbottraining.grading.grader import Grader
 from rlbottraining.training_exercise import TrainingExercise, Playlist
+from rlbottraining.common_graders.goal_grader import StrikerGrader
 
 import training_util
 from drive_to_ball_grader import DriveToBallGrader
@@ -38,40 +39,12 @@ def add_my_bot_to_playlist(exercises: Playlist) -> Playlist:
 
 
 @dataclass
-class StrikerPatience(StrikerExercise):
+class GroundShotExercise(StrikerExercise):
     """
-    Drops the ball from a certain height, requiring the bot to not drive
-    underneath the ball until it's in reach.
+    Shots from a fixed stationary grounded ball position.
     """
 
     car_start_x: float = 0
-
-    def make_game_state(self, rng: SeededRandomNumberGenerator) -> GameState:
-        return GameState(
-            ball=BallState(physics=Physics(
-                location=Vector3(0, 4400, 1000),
-                velocity=Vector3(0, 0, 200),
-                angular_velocity=Vector3(0, 0, 0))),
-            cars={
-                0: CarState(
-                    physics=Physics(
-                        location=Vector3(self.car_start_x, 3000, 0),
-                        rotation=Rotator(0, pi / 2, 0),
-                        velocity=Vector3(0, 0, 0),
-                        angular_velocity=Vector3(0, 0, 0)),
-                    jumped=False,
-                    double_jumped=False,
-                    boost_amount=0)
-            },
-            boosts={i: BoostState(0) for i in range(34)},
-        )
-
-@dataclass
-class DrivesToBallExercise(TrainingExercise):
-    """
-    Checks that we drive to the ball when it's in the center of the field.
-    """
-    grader: Grader = field(default_factory=DriveToBallGrader)
 
     def make_game_state(self, rng: SeededRandomNumberGenerator) -> GameState:
         return GameState(
@@ -82,23 +55,19 @@ class DrivesToBallExercise(TrainingExercise):
             cars={
                 0: CarState(
                     physics=Physics(
-                        location=Vector3(0, 2000, 0),
-                        rotation=Rotator(0, -pi / 2, 0),
+                        location=Vector3(0, -3000, 0),
+                        rotation=Rotator(0, pi / 2, 0),
                         velocity=Vector3(0, 0, 0),
                         angular_velocity=Vector3(0, 0, 0)),
                     jumped=False,
                     double_jumped=False,
-                    boost_amount=100)
+                    boost_amount=0)
             },
             boosts={i: BoostState(0) for i in range(34)},
         )
 
-
 def make_default_playlist() -> Playlist:
     exercises = [
-        StrikerPatience('start perfectly center'),
-        StrikerPatience('start on the right', car_start_x=-1000),
-        DrivesToBallExercise('Get close to ball'),
-        DrivesToBallExercise('Get close-ish to ball', grader=StrikerGrader(min_dist_to_pass=1000))
+        GroundShotExercise('Score a goal', grader=StrikerGrader(timeout_seconds=10))
     ]
     return add_my_bot_to_playlist(exercises)

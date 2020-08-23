@@ -8,8 +8,8 @@ from util.drive import steer_toward_target
 from util.sequence import Sequence, ControlStep
 from util.vec import Vec3
 
-
 class MyBot(BaseAgent):
+    target = Vec3(x=0, y=4500, z=0) # TODO must manually be kept in sync with target in ../training
 
     def __init__(self, name, team, index):
         super().__init__(name, team, index)
@@ -55,6 +55,9 @@ class MyBot(BaseAgent):
         self.renderer.draw_line_3d(car_location, target_location, self.renderer.white())
         self.renderer.draw_string_3d(car_location, 1, 1, f'Speed: {car_velocity.length():.1f}', self.renderer.white())
         self.renderer.draw_rect_3d(target_location, 8, 8, True, self.renderer.cyan(), centered=True)
+        self.renderer.draw_rect_3d(MyBot.target, 8, 8, True, self.renderer.cyan(), centered=True)
+        self.renderer.draw_line_3d(ball_location, MyBot.target, self.renderer.white())
+        self.renderer.draw_string_3d(MyBot.target, 1, 1, f'Distance: {MyBot.target.dist(ball_location):.1f}', self.renderer.white())
 
         # if 750 < car_velocity.length() < 800:
         #     # We'll do a front flip if the car is moving at a certain speed.

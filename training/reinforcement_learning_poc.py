@@ -11,9 +11,12 @@ from rlbottraining.grading.grader import Grader
 from rlbottraining.training_exercise import TrainingExercise, Playlist
 from rlbottraining.common_graders.goal_grader import StrikerGrader
 
-import training_util
-from drive_to_ball_grader import DriveToBallGrader
+#from ..src.bot import MyBot # TODO needs parent package
 
+import training_util
+
+# from drive_to_ball_grader import DriveToBallGrader
+from ball_target_grader import BallTargetGrader
 
 def make_match_config_with_my_bot() -> MatchConfig:
     # Makes a config which only has our bot in it for now.
@@ -68,6 +71,6 @@ class GroundShotExercise(StrikerExercise):
 
 def make_default_playlist() -> Playlist:
     exercises = [
-        GroundShotExercise('Score a goal', grader=StrikerGrader(timeout_seconds=10))
+        GroundShotExercise('Hit the target', grader=BallTargetGrader(timeout_seconds=10, target=Vector3(x=0, y=4500, z=0)))
     ]
     return add_my_bot_to_playlist(exercises)

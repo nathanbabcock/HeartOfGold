@@ -1,6 +1,7 @@
 from rlbot.agents.base_agent import BaseAgent, SimpleControllerState
 from rlbot.messages.flat.QuickChatSelection import QuickChatSelection
 from rlbot.utils.structures.game_data_struct import GameTickPacket
+from rlbot.utils.game_state_util import GameState, BallState, CarState, Physics, Vector3, Rotator, GameInfoState
 
 from util.ball_prediction_analysis import find_slice_at_time
 from util.boost_pad_tracker import BoostPadTracker
@@ -8,9 +9,10 @@ from util.drive import steer_toward_target
 from util.sequence import Sequence, ControlStep
 from util.vec import Vec3
 
-class MyBot(BaseAgent):
-    target = Vec3(x=0, y=4500, z=0) # TODO must manually be kept in sync with target in ../training
+from math import pi
+from random import randint
 
+class MyBot(BaseAgent):
     def __init__(self, name, team, index):
         super().__init__(name, team, index)
         self.active_sequence: Sequence = None
@@ -19,6 +21,20 @@ class MyBot(BaseAgent):
     def initialize_agent(self):
         # Set up information about the boost pads now that the game is active and the info is available
         self.boost_pad_tracker.initialize_boosts(self.get_field_info())
+        self.reset_gamestate()
+
+    def reset_gamestate(self):
+        car_state = CarState(jumped=False, double_jumped=False, boost_amount=0, 
+                     physics=Physics(location=Vector3(0, -3000, 0), velocity=Vector3(0, 0, 0), rotation=Rotator(0, pi / 2, 0),
+                     angular_velocity=Vector3(0, 0, 0)))
+
+        ball_state = BallState(Physics(location=Vector3(0, 0, 100), velocity=Vector3(0, 0, 0), rotation=Rotator(0, 0, 0), angular_velocity=Vector3(0, 0, 0)))
+        game_state = GameState(ball=ball_state, cars={self.index: car_state})
+        # game_info_state = GameInfoState(world_gravity_z=700, game_speed=0.8)
+        self.set_game_state(game_state)
+        self.intermediate_destination = Vec3(x=randint(0, 3500), y=randint(-3000,-1000), z=0)
+        self.cur_destination = 'intermediate'
+        return None
 
     def get_output(self, packet: GameTickPacket) -> SimpleControllerState:
         """
@@ -41,6 +57,15 @@ class MyBot(BaseAgent):
         car_location = Vec3(my_car.physics.location)
         car_velocity = Vec3(my_car.physics.velocity)
         ball_location = Vec3(packet.game_ball.physics.location)
+        training_target_location = Vec3(x=0, y=3000, z=0)
+        reset = False
+
+        if ball_location.dist(training_target_location) < 200:
+            self.reset_gamestate()
+            reset = True
+        if ball_location.y > training_target_location.y + 200:
+            self.reset_gamestate()
+            reset = True
 
         if car_location.dist(ball_location) > 1500:
             # We're far away from the ball, let's try to lead it a little bit
@@ -52,22 +77,33 @@ class MyBot(BaseAgent):
             target_location = ball_location
 
         # Draw some things to help understand what the bot is thinking
-        self.renderer.draw_line_3d(car_location, target_location, self.renderer.white())
-        self.renderer.draw_string_3d(car_location, 1, 1, f'Speed: {car_velocity.length():.1f}', self.renderer.white())
-        self.renderer.draw_rect_3d(target_location, 8, 8, True, self.renderer.cyan(), centered=True)
-        self.renderer.draw_rect_3d(MyBot.target, 8, 8, True, self.renderer.cyan(), centered=True)
-        self.renderer.draw_line_3d(ball_location, MyBot.target, self.renderer.white())
-        self.renderer.draw_string_3d(MyBot.target, 1, 1, f'Distance: {MyBot.target.dist(ball_location):.1f}', self.renderer.white())
+    
+        self.renderer.draw_rect_3d(training_target_location, 8, 8, True, self.renderer.green(), centered=True)
+        self.renderer.draw_rect_3d(self.intermediate_destination, 8, 8, True, self.renderer.cyan(), centered=True)
+        if self.cur_destination == 'ball':
+            self.renderer.draw_line_3d(car_location, ball_location, self.renderer.white())
+        else:
+            self.renderer.draw_line_3d(car_location, self.intermediate_destination, self.renderer.white())
+        self.renderer.draw_line_3d(ball_location, training_target_location, self.renderer.green())
+        # self.renderer.draw_line_3d(car_location, target_location, self.renderer.white())
+        # self.renderer.draw_string_3d(car_location, 1, 1, f'Speed: {car_velocity.length():.1f}', self.renderer.white())
+        # self.renderer.draw_rect_3d(target_location, 8, 8, True, self.renderer.cyan(), centered=True)
+        # self.renderer.draw_rect_3d(training_target_location, 8, 8, True, self.renderer.cyan(), centered=True)
+        # self.renderer.draw_line_3d(ball_location, training_target_location, self.renderer.white())
+        # self.renderer.draw_string_3d(training_target_location, 1, 1, f'Distance: {training_target_location.dist(ball_location):.1f}', self.renderer.white())
 
         # if 750 < car_velocity.length() < 800:
         #     # We'll do a front flip if the car is moving at a certain speed.
         #     return self.begin_front_flip(packet)
 
         controls = SimpleControllerState()
-        controls.steer = steer_toward_target(my_car, target_location)
+        if reset:
+            return controls
+        if self.cur_destination == 'intermediate' and self.intermediate_destination.dist(car_location) <= 200:
+            self.cur_destination = 'ball'
+        controls.steer = steer_toward_target(my_car, target_location if self.cur_destination=='ball' else self.intermediate_destination)
         controls.throttle = 1.0
         # controls.boost = True
-        # You can set more controls if you want, like controls.boost.
 
         return controls
 

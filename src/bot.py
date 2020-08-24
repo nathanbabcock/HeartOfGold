@@ -11,12 +11,44 @@ from util.vec import Vec3
 
 from math import pi
 from random import randint
+import numpy as np
+
+from keras.models import Sequential
+from keras.layers import Dense
+from keras import Input
+
 
 class MyBot(BaseAgent):
     def __init__(self, name, team, index):
         super().__init__(name, team, index)
         self.active_sequence: Sequence = None
         self.boost_pad_tracker = BoostPadTracker()
+        self.iteration = 0
+
+        # first neural network with keras tutorial
+
+        # load the dataset
+        # dataset = loadtxt('pima-indians-diabetes.csv', delimiter=',')
+
+        # split into input (X) and output (y) variables
+        # X = dataset[:,0:8]
+        # y = dataset[:,2]
+
+        # define the keras model
+        self.model = Sequential()
+        self.model.add(Dense(100, input_dim=6, activation='relu'))
+        self.model.add(Dense(10, activation='relu'))
+        self.model.add(Dense(2, activation='relu'))
+
+        # compile the keras model
+        self.model.compile(loss='binary_crossentropy', optimizer='adam', metrics=['accuracy'])
+
+        # fit the keras model on the dataset
+        # model.fit(X, y, epochs=150, batch_size=10)
+
+        # evaluate the keras model
+        # _, accuracy = model.evaluate(X, y)
+        # print('Accuracy: %.2f' % (accuracy*100))
 
     def initialize_agent(self):
         # Set up information about the boost pads now that the game is active and the info is available
@@ -24,16 +56,29 @@ class MyBot(BaseAgent):
         self.reset_gamestate()
 
     def reset_gamestate(self):
+        self.initial_ball_location = Vector3(0, 0, 100)
+        self.initial_car_location = Vector3(randint(-3000, 3000), -4000, 0)
+        self.training_target_location = Vec3(x=randint(-3000, 3000), y=3000, z=0)
+
+        print('iteration ' + str(self.iteration))
+        if (self.iteration > 10):
+            prediction = self.model.predict(np.array([self.initial_car_location.x, self.initial_car_location.y, self.initial_ball_location.x, self.initial_ball_location.y, self.training_target_location.x, self.training_target_location.y]).reshape(1, 6))[0]
+            print('Predicted intermediate point:')
+            print(*prediction)
+            self.intermediate_destination = Vec3(x=prediction[0], y=prediction[1], z=0)
+        else:
+            self.intermediate_destination = Vec3(x=randint(-2000, 2000), y=randint(-4000,0), z=0)
+        self.cur_destination = 'intermediate'
+
         car_state = CarState(jumped=False, double_jumped=False, boost_amount=0, 
-                     physics=Physics(location=Vector3(0, -3000, 0), velocity=Vector3(0, 0, 0), rotation=Rotator(0, pi / 2, 0),
+                     physics=Physics(location=self.initial_car_location, velocity=Vector3(0, 0, 0), rotation=Rotator(0, pi / 2, 0),
                      angular_velocity=Vector3(0, 0, 0)))
 
-        ball_state = BallState(Physics(location=Vector3(0, 0, 100), velocity=Vector3(0, 0, 0), rotation=Rotator(0, 0, 0), angular_velocity=Vector3(0, 0, 0)))
+        ball_state = BallState(Physics(location=self.initial_ball_location, velocity=Vector3(0, 0, 0), rotation=Rotator(0, 0, 0), angular_velocity=Vector3(0, 0, 0)))
         game_state = GameState(ball=ball_state, cars={self.index: car_state})
         # game_info_state = GameInfoState(world_gravity_z=700, game_speed=0.8)
         self.set_game_state(game_state)
-        self.intermediate_destination = Vec3(x=randint(0, 3500), y=randint(-3000,-1000), z=0)
-        self.cur_destination = 'intermediate'
+
         return None
 
     def get_output(self, packet: GameTickPacket) -> SimpleControllerState:
@@ -57,34 +102,51 @@ class MyBot(BaseAgent):
         car_location = Vec3(my_car.physics.location)
         car_velocity = Vec3(my_car.physics.velocity)
         ball_location = Vec3(packet.game_ball.physics.location)
-        training_target_location = Vec3(x=0, y=3000, z=0)
         reset = False
+        train = True
 
-        if ball_location.dist(training_target_location) < 200:
-            self.reset_gamestate()
+        # Experiments constraints violated (going past the ball)
+        if(car_location.y > ball_location.y):
             reset = True
-        if ball_location.y > training_target_location.y + 200:
-            self.reset_gamestate()
+            train = False
+            print('Scrapping bad data')
+        
+        # Check if it hit the target
+        if ball_location.dist(self.training_target_location) < 200:
             reset = True
+        if ball_location.y > self.training_target_location.y + 200:
+            reset = True
+        if reset and train:
+            inputs = np.array([car_location.x, car_location.y, self.initial_ball_location.x, self.initial_ball_location.y, ball_location.x, ball_location.y])
+            outputs = np.array([self.intermediate_destination.x, self.intermediate_destination.y])
+            print(inputs.shape)
+            inputs.reshape(1,6)
+            outputs.reshape(1,2)
+            print(inputs.shape)
+            self.model.train_on_batch(inputs.reshape(1,6), outputs.reshape(1,2))
+            print('Inputs:')
+            print(*inputs)
+            print('Outputs:')
+            print(*outputs)
+            self.iteration += 1
 
-        if car_location.dist(ball_location) > 1500:
-            # We're far away from the ball, let's try to lead it a little bit
-            ball_prediction = self.get_ball_prediction_struct()  # This can predict bounces, etc
-            ball_in_future = find_slice_at_time(ball_prediction, packet.game_info.seconds_elapsed + 2)
-            target_location = Vec3(ball_in_future.physics.location)
-            self.renderer.draw_line_3d(ball_location, target_location, self.renderer.cyan())
-        else:
-            target_location = ball_location
+        # We're far away from the ball, let's try to lead it a little bit
+        # if car_location.dist(ball_location) > 1500:
+        #     ball_prediction = self.get_ball_prediction_struct() # This can predict bounces, etc
+        #     ball_in_future = find_slice_at_time(ball_prediction, packet.game_info.seconds_elapsed + 2)
+        #     target_location = Vec3(ball_in_future.physics.location)
+        #     self.renderer.draw_line_3d(ball_location, target_location, self.renderer.cyan())
+        # else:
+        #     target_location = ball_location
 
         # Draw some things to help understand what the bot is thinking
-    
-        self.renderer.draw_rect_3d(training_target_location, 8, 8, True, self.renderer.green(), centered=True)
+        self.renderer.draw_rect_3d(self.training_target_location, 8, 8, True, self.renderer.green(), centered=True)
         self.renderer.draw_rect_3d(self.intermediate_destination, 8, 8, True, self.renderer.cyan(), centered=True)
         if self.cur_destination == 'ball':
             self.renderer.draw_line_3d(car_location, ball_location, self.renderer.white())
         else:
             self.renderer.draw_line_3d(car_location, self.intermediate_destination, self.renderer.white())
-        self.renderer.draw_line_3d(ball_location, training_target_location, self.renderer.green())
+        self.renderer.draw_line_3d(ball_location, self.training_target_location, self.renderer.green())
         # self.renderer.draw_line_3d(car_location, target_location, self.renderer.white())
         # self.renderer.draw_string_3d(car_location, 1, 1, f'Speed: {car_velocity.length():.1f}', self.renderer.white())
         # self.renderer.draw_rect_3d(target_location, 8, 8, True, self.renderer.cyan(), centered=True)
@@ -98,10 +160,11 @@ class MyBot(BaseAgent):
 
         controls = SimpleControllerState()
         if reset:
+            self.reset_gamestate()
             return controls
         if self.cur_destination == 'intermediate' and self.intermediate_destination.dist(car_location) <= 200:
             self.cur_destination = 'ball'
-        controls.steer = steer_toward_target(my_car, target_location if self.cur_destination=='ball' else self.intermediate_destination)
+        controls.steer = steer_toward_target(my_car, ball_location if self.cur_destination=='ball' else self.intermediate_destination)
         controls.throttle = 1.0
         # controls.boost = True
 

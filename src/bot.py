@@ -39,8 +39,8 @@ class MyBot(BaseAgent):
             return loss
 
         # compile the keras model
-        self.model.compile(loss=customLoss, optimizer='adam', metrics=['accuracy'])
-        # self.model.compile(loss='mean_squared_error', optimizer='adam', metrics=['accuracy'])
+        # self.model.compile(loss=customLoss, optimizer='adam', metrics=['accuracy'])
+        self.model.compile(loss='mean_squared_error', optimizer='adam', metrics=['accuracy'])
 
 
     def initialize_agent(self):

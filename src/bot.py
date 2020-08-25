@@ -34,7 +34,7 @@ class MyBot(BaseAgent):
         self.model.add(Dense(1, input_dim=1))
 
         # compile the keras model
-        self.model.compile(loss='binary_crossentropy', optimizer='adam', metrics=['accuracy'])
+        self.model.compile(loss='mean_squared_error', optimizer='adam', metrics=['accuracy'])
 
 
     def initialize_agent(self):
@@ -49,14 +49,12 @@ class MyBot(BaseAgent):
         self.training_target_location = Vec3(x=randint(-3000, 3000), y=3000, z=0)
         # self.training_target_location = Vec3(x=1000, y=3000, z=0)
 
-        if (self.iteration > 10):
+        if (self.iteration >= 10):
             # inputs = np.array([self.initial_car_location.x, self.initial_car_location.y, self.initial_ball_location.x, self.initial_ball_location.y, self.training_target_location.x, self.training_target_location.y]).reshape(1, 6)
             inputs = np.array([self.training_target_location.x])
-            print('Inputs:')
-            print(*inputs)
             prediction = self.model.predict(inputs)[0][0]
-            print('Predicted output:')
-            print(prediction)
+            print(f'> Prediction Input: {inputs}')
+            print(f'> Prediction output: {prediction}')
             # self.intermediate_destination = Vec3(x=prediction[0], y=prediction[1], z=0)
             self.initial_car_location = Vector3(prediction, -3000, 0)
         else:
@@ -107,26 +105,29 @@ class MyBot(BaseAgent):
         if(car_location.y > ball_location.y):
             reset = True
             train = False
-            print('Scrapping bad data')
+            print('> Scrapping bad data')
         
         # Check if it hit the target
         # if ball_location.dist(self.training_target_location) < 200:
         #     reset = True
         if ball_location.y > self.training_target_location.y:
             reset = True
-        if reset and train and self.skip_train_ticks <= 0:
+        if reset and self.iteration == 0:
+            train = False
+            self.iteration += 1
+            self.skip_train_ticks = 10
+            print('Skipping first iteration')
+        if reset and train and self.skip_train_ticks <= 0 :
             # inputs = np.array([self.initial_car_location.x, self.initial_car_location.y, self.initial_ball_location.x, self.initial_ball_location.y, ball_location.x, ball_location.y])
             # inputs = np.array([ball_location.x, ball_location.y])
             # inputs = np.array([ball_location.x, ball_location.y])
             # outputs = np.array([self.intermediate_destination.x, self.intermediate_destination.y])
-            print('training iteration ' + str(self.iteration))
+            print(f'>>> TRAINING ITERATION {self.iteration}')
             inputs = np.array([ball_location.x])
             outputs = np.array([self.initial_car_location.x])
             self.model.train_on_batch(inputs, outputs)
-            print('Inputs:')
-            print(*inputs)
-            print('Outputs:')
-            print(*outputs)
+            print(f'> Training Input: {inputs}')
+            print(f'> Training Output: {outputs}')
             self.iteration += 1
             self.waiting_for_reset = True
             self.skip_train_ticks = 10

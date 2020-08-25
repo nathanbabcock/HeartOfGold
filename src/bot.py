@@ -49,7 +49,7 @@ class MyBot(BaseAgent):
         self.training_target_location = Vec3(x=randint(-3000, 3000), y=3000, z=0)
         # self.training_target_location = Vec3(x=1000, y=3000, z=0)
 
-        if (self.iteration >= 10):
+        if (self.iteration > 25):
             # inputs = np.array([self.initial_car_location.x, self.initial_car_location.y, self.initial_ball_location.x, self.initial_ball_location.y, self.training_target_location.x, self.training_target_location.y]).reshape(1, 6)
             inputs = np.array([self.training_target_location.x])
             prediction = self.model.predict(inputs)[0][0]
@@ -63,8 +63,11 @@ class MyBot(BaseAgent):
         # self.cur_destination = 'intermediate'
         self.cur_destination = 'ball'
 
+        ang = (Vec3(self.initial_ball_location) - Vec3(self.initial_car_location)).ang_to(Vec3(1,0,0))
+        # print(ang)
+
         car_state = CarState(jumped=False, double_jumped=False, boost_amount=0, 
-                     physics=Physics(location=self.initial_car_location, velocity=Vector3(0, 0, 0), rotation=Rotator(0, pi / 2, 0),
+                     physics=Physics(location=self.initial_car_location, velocity=Vector3(0, 0, 0), rotation=Rotator(0, ang, 0),
                      angular_velocity=Vector3(0, 0, 0)))
 
         ball_state = BallState(Physics(location=self.initial_ball_location, velocity=Vector3(0, 0, 0), rotation=Rotator(0, 0, 0), angular_velocity=Vector3(0, 0, 0)))

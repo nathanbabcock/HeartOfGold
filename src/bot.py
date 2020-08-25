@@ -16,7 +16,7 @@ import numpy as np
 from keras.models import Sequential
 from keras.layers import Dense
 from keras import Input
-
+import keras.backend as K
 
 class MyBot(BaseAgent):
     def __init__(self, name, team, index):
@@ -33,8 +33,14 @@ class MyBot(BaseAgent):
         # self.model.add(Dense(6, activation='relu'))
         self.model.add(Dense(1, input_dim=1))
 
+        # custom loss func
+        def customLoss(yTrue, yPred):
+            loss = K.maximum(K.cast(yTrue, 'float32'), yPred) - K.minimum(K.cast(yTrue, 'float32'), yPred)
+            return loss
+
         # compile the keras model
-        self.model.compile(loss='mean_squared_error', optimizer='adam', metrics=['accuracy'])
+        self.model.compile(loss=customLoss, optimizer='adam', metrics=['accuracy'])
+        # self.model.compile(loss='mean_squared_error', optimizer='adam', metrics=['accuracy'])
 
 
     def initialize_agent(self):
@@ -49,7 +55,7 @@ class MyBot(BaseAgent):
         self.training_target_location = Vec3(x=randint(-3000, 3000), y=3000, z=0)
         # self.training_target_location = Vec3(x=1000, y=3000, z=0)
 
-        if (self.iteration > 25):
+        if (self.iteration > 10):
             # inputs = np.array([self.initial_car_location.x, self.initial_car_location.y, self.initial_ball_location.x, self.initial_ball_location.y, self.training_target_location.x, self.training_target_location.y]).reshape(1, 6)
             inputs = np.array([self.training_target_location.x])
             prediction = self.model.predict(inputs)[0][0]

@@ -41,6 +41,7 @@ class MyBot(BaseAgent):
         # Set up information about the boost pads now that the game is active and the info is available
         self.boost_pad_tracker.initialize_boosts(self.get_field_info())
         self.reset_gamestate()
+        self.init_plot()
         print('> Alphabot: I N I T I A L I Z E D')
 
     def reset_gamestate(self):
@@ -78,25 +79,34 @@ class MyBot(BaseAgent):
 
         return None
 
-    def drawPlot(self):
+    def init_plot(self):
+        print('> Initializing plot...')
+        plt.clf()
+        plt.close()
+        plt.ion()
+        self.fig = plt.figure()
+        self.plot = plt.scatter(self.inputs, self.outputs)
+        plt.xlim(-3000,3000)
+        plt.ylim(-3000,3000)
+        # plt.title('Multiple Linear Regression Training Data')
+        plt.xlabel('Target ball x position')
+        plt.ylabel('Starting car x position')
+        # def update(frame):
+        #     self.plot.set_offsets(np.c_[self.inputs, self.outputs])
+        #     self.fig.canvas.draw()
+        #     plt.pause(0.01)
+        #     return
+        # animation = FuncAnimation(self.fig, update, interval=16)
+        plt.show()
+
+    def draw_plot(self):
         # init plot
         if not self.plot:
-            print('> Initializing plot...')
-            plt.ion()
-            self.fig = plt.figure()
-            self.plot = plt.scatter(self.inputs, self.outputs)
-            plt.xlim(-3000,3000)
-            plt.ylim(-3000,3000)
-            # def update(frame):
-            #     self.plot.set_offsets(self.inputs)
-            #     return
-            # animation = FuncAnimation(self.fig, update, interval=100)
-            plt.show()
+            self.init_plot()
 
         # update plot
         self.plot.set_offsets(np.c_[self.inputs, self.outputs])
-        self.fig.canvas.draw_idle()
-        # plt.draw()
+        plt.draw()
         plt.pause(0.01)
 
     def get_output(self, packet: GameTickPacket) -> SimpleControllerState:
@@ -149,7 +159,7 @@ class MyBot(BaseAgent):
             self.outputs.append(outputs)
             self.model.fit(self.inputs, self.outputs)
 
-            self.drawPlot()
+            self.draw_plot()
             print(f'> Training Input: {inputs}')
             print(f'> Training Output: {outputs}')
             self.iteration += 1

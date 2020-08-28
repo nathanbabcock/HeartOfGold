@@ -41,6 +41,7 @@ class MyBot(BaseAgent):
         # Set up information about the boost pads now that the game is active and the info is available
         self.boost_pad_tracker.initialize_boosts(self.get_field_info())
         self.reset_gamestate()
+        print('> Alphabot: I N I T I A L I Z E D')
 
     def reset_gamestate(self):
         self.initial_ball_location = Vector3(0, 0, 100)
@@ -49,12 +50,12 @@ class MyBot(BaseAgent):
         self.training_target_location = Vec3(x=randint(-3000, 3000), y=3000, z=0)
         # self.training_target_location = Vec3(x=1000, y=3000, z=0)
 
-        if (self.iteration > 1000):
+        if (self.iteration > 2):
             # inputs = np.array([self.initial_car_location.x, self.initial_car_location.y, self.initial_ball_location.x, self.initial_ball_location.y, self.training_target_location.x, self.training_target_location.y]).reshape(1, 6)
-            inputs = np.array([self.training_target_location.x])
+            inputs = [[self.training_target_location.x]]
             prediction = self.model.predict(inputs)
             print(f'> Prediction Input: {inputs}')
-            print(f'> Prediction output: {prediction}')
+            print(f'> Prediction Output: {prediction}')
             # self.intermediate_destination = Vec3(x=prediction[0], y=prediction[1], z=0)
             self.initial_car_location = Vector3(prediction, -3000, 0)
         else:
@@ -96,7 +97,7 @@ class MyBot(BaseAgent):
         self.plot.set_offsets(np.c_[self.inputs, self.outputs])
         self.fig.canvas.draw_idle()
         # plt.draw()
-        plt.pause(0.1)
+        plt.pause(0.01)
 
     def get_output(self, packet: GameTickPacket) -> SimpleControllerState:
         """

@@ -33,6 +33,7 @@ class MyBot(BaseAgent):
         self.outputs = []
         self.plot = None
         self.fig = None
+        self.axes = []
 
         # init sklearn multi linear regression model
         self.model = LinearRegression()
@@ -41,11 +42,13 @@ class MyBot(BaseAgent):
         # Set up information about the boost pads now that the game is active and the info is available
         self.boost_pad_tracker.initialize_boosts(self.get_field_info())
         self.reset_gamestate()
-        self.init_plot()
+        # self.init_plot()
         print('> Alphabot: I N I T I A L I Z E D')
 
     def reset_gamestate(self):
-        self.initial_ball_location = Vector3(0, 0, 100)
+        # self.initial_ball_location = Vector3(0, 0, 100)
+        self.initial_ball_location = Vector3(randint(-1500, 1500), 0, 100)
+
         # self.initial_car_location = Vector3(randint(-3000, 3000), -4000, 0)
         # self.initial_car_location = Vector3(-3000, -4000, 0)
         self.training_target_location = Vec3(x=randint(-3000, 3000), y=3000, z=0)
@@ -53,7 +56,7 @@ class MyBot(BaseAgent):
 
         if (self.iteration > 2):
             # inputs = np.array([self.initial_car_location.x, self.initial_car_location.y, self.initial_ball_location.x, self.initial_ball_location.y, self.training_target_location.x, self.training_target_location.y]).reshape(1, 6)
-            inputs = [[self.training_target_location.x]]
+            inputs = [[self.training_target_location.x, self.initial_ball_location.x]]
             prediction = self.model.predict(inputs)
             print(f'> Prediction Input: {inputs}')
             print(f'> Prediction Output: {prediction}')
@@ -85,7 +88,16 @@ class MyBot(BaseAgent):
         plt.close()
         plt.ion()
         self.fig = plt.figure()
-        self.plot = plt.scatter(self.inputs, self.outputs)
+        self.ax = self.fig.add_subplot()
+        print('>inputs')
+        print(self.inputs)
+        print('>outputs')
+        print(self.outputs)
+        self.plot = [
+            plt.scatter(list(zip(*self.inputs))[0], self.outputs),
+            plt.scatter(list(zip(*self.inputs))[1], self.outputs)
+        ]
+        # self.plot = plt.scatter(self.inputs, self.outputs)
         plt.xlim(-3000,3000)
         plt.ylim(-3000,3000)
         # plt.title('Multiple Linear Regression Training Data')
@@ -98,14 +110,18 @@ class MyBot(BaseAgent):
         #     return
         # animation = FuncAnimation(self.fig, update, interval=16)
         plt.show()
+        return self.plot
 
     def draw_plot(self):
         # init plot
         if not self.plot:
             self.init_plot()
+        if not self.plot:
+            return
 
         # update plot
-        self.plot.set_offsets(np.c_[self.inputs, self.outputs])
+        self.plot[0].set_offsets(np.c_[list(zip(*self.inputs))[0], self.outputs])
+        self.plot[1].set_offsets(np.c_[list(zip(*self.inputs))[1], self.outputs])
         plt.draw()
         plt.pause(0.01)
 
@@ -153,7 +169,7 @@ class MyBot(BaseAgent):
             print('Skipping first iteration')
         if reset and train and self.skip_train_ticks <= 0 :
             print(f'>>> TRAINING ITERATION {self.iteration}')
-            inputs = [ball_location.x]
+            inputs = [ball_location.x, self.initial_ball_location.x]
             outputs = [self.initial_car_location.x]
             self.inputs.append(inputs)
             self.outputs.append(outputs)

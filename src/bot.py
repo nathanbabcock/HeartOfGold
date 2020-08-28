@@ -51,12 +51,13 @@ class MyBot(BaseAgent):
 
         # self.initial_car_location = Vector3(randint(-3000, 3000), -4000, 0)
         # self.initial_car_location = Vector3(-3000, -4000, 0)
-        self.training_target_location = Vec3(x=randint(-3000, 3000), y=3000, z=0)
+        # self.training_target_location = Vec3(x=randint(-3000, 3000), y=3000, z=0)
+        self.training_target_location = Vec3(x=randint(-3000, 3000), y=randint(1000, 3000), z=0)
         # self.training_target_location = Vec3(x=1000, y=3000, z=0)
 
         if (self.iteration > 2):
             # inputs = [[self.training_target_location.x]]
-            inputs = [[self.training_target_location.x, self.initial_ball_location.x]]
+            inputs = [[self.training_target_location.x,  self.training_target_location.y, self.initial_ball_location.x]]
             prediction = self.model.predict(inputs)
             print(f'> Prediction Input: {inputs}')
             print(f'> Prediction Output: {prediction}')
@@ -98,7 +99,9 @@ class MyBot(BaseAgent):
         # TODO unify a config of input features & their labels between plotting, fitting, and prediction
         labels = [
             'target x',
-            'ball x'
+            'target y',
+            'ball x',
+            'ball y'
         ]
         self.plot = [ plt.scatter(list(zip(*self.inputs))[i], self.outputs, label=labels[i]) for i in range(len(self.inputs[0])) ]
         # self.plot = plt.scatter(self.inputs, self.outputs)
@@ -175,7 +178,7 @@ class MyBot(BaseAgent):
         if reset and train and self.skip_train_ticks <= 0 :
             print(f'>>> TRAINING ITERATION {self.iteration}')
             # inputs = [ball_location.x]
-            inputs = [ball_location.x, self.initial_ball_location.x]
+            inputs = [ball_location.x, ball_location.y, self.initial_ball_location.x]
             outputs = [self.initial_car_location.x]
             self.inputs.append(inputs)
             self.outputs.append(outputs)

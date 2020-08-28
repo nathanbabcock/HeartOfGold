@@ -13,10 +13,14 @@ from math import pi
 from random import randint
 import numpy as np
 
-from keras.models import Sequential
-from keras.layers import Dense
-from keras import Input
-import keras.backend as K
+# from keras.models import Sequential
+# from keras.layers import Dense
+# from keras import Input
+# import keras.backend as K
+
+from sklearn.linear_model import LinearRegression
+import matplotlib.pyplot as plt
+from matplotlib.animation import FuncAnimation
 
 class MyBot(BaseAgent):
     def __init__(self, name, team, index):
@@ -24,24 +28,14 @@ class MyBot(BaseAgent):
         self.active_sequence: Sequence = None
         self.boost_pad_tracker = BoostPadTracker()
         self.iteration = 0
-        self.waiting_for_reset = False
         self.skip_train_ticks = 0
+        self.inputs = []
+        self.outputs = []
+        self.plot = None
+        self.fig = None
 
-        # define the keras model
-        self.model = Sequential()
-        # self.model.add(Dense(10, input_dim=1, activation='relu'))
-        # self.model.add(Dense(6, activation='relu'))
-        self.model.add(Dense(1, input_dim=1))
-
-        # custom loss func
-        def customLoss(yTrue, yPred):
-            loss = K.maximum(K.cast(yTrue, 'float32'), yPred) - K.minimum(K.cast(yTrue, 'float32'), yPred)
-            return loss
-
-        # compile the keras model
-        # self.model.compile(loss=customLoss, optimizer='adam', metrics=['accuracy'])
-        self.model.compile(loss='mean_squared_error', optimizer='adam', metrics=['accuracy'])
-
+        # init sklearn multi linear regression model
+        self.model = LinearRegression()
 
     def initialize_agent(self):
         # Set up information about the boost pads now that the game is active and the info is available
@@ -55,10 +49,10 @@ class MyBot(BaseAgent):
         self.training_target_location = Vec3(x=randint(-3000, 3000), y=3000, z=0)
         # self.training_target_location = Vec3(x=1000, y=3000, z=0)
 
-        if (self.iteration > 10):
+        if (self.iteration > 1000):
             # inputs = np.array([self.initial_car_location.x, self.initial_car_location.y, self.initial_ball_location.x, self.initial_ball_location.y, self.training_target_location.x, self.training_target_location.y]).reshape(1, 6)
             inputs = np.array([self.training_target_location.x])
-            prediction = self.model.predict(inputs)[0][0]
+            prediction = self.model.predict(inputs)
             print(f'> Prediction Input: {inputs}')
             print(f'> Prediction output: {prediction}')
             # self.intermediate_destination = Vec3(x=prediction[0], y=prediction[1], z=0)
@@ -80,9 +74,29 @@ class MyBot(BaseAgent):
         game_state = GameState(ball=ball_state, cars={self.index: car_state})
         # game_info_state = GameInfoState(world_gravity_z=700, game_speed=0.8)
         self.set_game_state(game_state)
-        self.waiting_for_reset = False
 
         return None
+
+    def drawPlot(self):
+        # init plot
+        if not self.plot:
+            print('> Initializing plot...')
+            plt.ion()
+            self.fig = plt.figure()
+            self.plot = plt.scatter(self.inputs, self.outputs)
+            plt.xlim(-3000,3000)
+            plt.ylim(-3000,3000)
+            # def update(frame):
+            #     self.plot.set_offsets(self.inputs)
+            #     return
+            # animation = FuncAnimation(self.fig, update, interval=100)
+            plt.show()
+
+        # update plot
+        self.plot.set_offsets(np.c_[self.inputs, self.outputs])
+        self.fig.canvas.draw_idle()
+        # plt.draw()
+        plt.pause(0.1)
 
     def get_output(self, packet: GameTickPacket) -> SimpleControllerState:
         """
@@ -127,18 +141,17 @@ class MyBot(BaseAgent):
             self.skip_train_ticks = 10
             print('Skipping first iteration')
         if reset and train and self.skip_train_ticks <= 0 :
-            # inputs = np.array([self.initial_car_location.x, self.initial_car_location.y, self.initial_ball_location.x, self.initial_ball_location.y, ball_location.x, ball_location.y])
-            # inputs = np.array([ball_location.x, ball_location.y])
-            # inputs = np.array([ball_location.x, ball_location.y])
-            # outputs = np.array([self.intermediate_destination.x, self.intermediate_destination.y])
             print(f'>>> TRAINING ITERATION {self.iteration}')
-            inputs = np.array([ball_location.x])
-            outputs = np.array([self.initial_car_location.x])
-            self.model.train_on_batch(inputs, outputs)
+            inputs = [ball_location.x]
+            outputs = [self.initial_car_location.x]
+            self.inputs.append(inputs)
+            self.outputs.append(outputs)
+            self.model.fit(self.inputs, self.outputs)
+
+            self.drawPlot()
             print(f'> Training Input: {inputs}')
             print(f'> Training Output: {outputs}')
             self.iteration += 1
-            self.waiting_for_reset = True
             self.skip_train_ticks = 10
 
         # We're far away from the ball, let's try to lead it a little bit

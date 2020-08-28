@@ -47,7 +47,8 @@ class MyBot(BaseAgent):
 
     def reset_gamestate(self):
         # self.initial_ball_location = Vector3(0, 0, 100)
-        self.initial_ball_location = Vector3(randint(-1500, 1500), 0, 100)
+        # self.initial_ball_location = Vector3(randint(-1500, 1500), 0, 100)
+        self.initial_ball_location = Vector3(randint(-1500, 1500), randint(-1000, 1000), 100)
 
         # self.initial_car_location = Vector3(randint(-3000, 3000), -4000, 0)
         # self.initial_car_location = Vector3(-3000, -4000, 0)
@@ -57,7 +58,7 @@ class MyBot(BaseAgent):
 
         if (self.iteration > 2):
             # inputs = [[self.training_target_location.x]]
-            inputs = [[self.training_target_location.x,  self.training_target_location.y, self.initial_ball_location.x]]
+            inputs = [[self.training_target_location.x,  self.training_target_location.y, self.initial_ball_location.x, self.initial_ball_location.y]]
             prediction = self.model.predict(inputs)
             print(f'> Prediction Input: {inputs}')
             print(f'> Prediction Output: {prediction}')
@@ -178,7 +179,7 @@ class MyBot(BaseAgent):
         if reset and train and self.skip_train_ticks <= 0 :
             print(f'>>> TRAINING ITERATION {self.iteration}')
             # inputs = [ball_location.x]
-            inputs = [ball_location.x, ball_location.y, self.initial_ball_location.x]
+            inputs = [ball_location.x, ball_location.y, self.initial_ball_location.x, self.initial_ball_location.y]
             outputs = [self.initial_car_location.x]
             self.inputs.append(inputs)
             self.outputs.append(outputs)

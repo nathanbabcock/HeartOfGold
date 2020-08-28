@@ -55,7 +55,7 @@ class MyBot(BaseAgent):
         # self.training_target_location = Vec3(x=1000, y=3000, z=0)
 
         if (self.iteration > 2):
-            # inputs = np.array([self.initial_car_location.x, self.initial_car_location.y, self.initial_ball_location.x, self.initial_ball_location.y, self.training_target_location.x, self.training_target_location.y]).reshape(1, 6)
+            # inputs = [[self.training_target_location.x]]
             inputs = [[self.training_target_location.x, self.initial_ball_location.x]]
             prediction = self.model.predict(inputs)
             print(f'> Prediction Input: {inputs}')
@@ -89,20 +89,25 @@ class MyBot(BaseAgent):
         plt.ion()
         self.fig = plt.figure()
         self.ax = self.fig.add_subplot()
-        print('>inputs')
-        print(self.inputs)
-        print('>outputs')
-        print(self.outputs)
-        self.plot = [
-            plt.scatter(list(zip(*self.inputs))[0], self.outputs),
-            plt.scatter(list(zip(*self.inputs))[1], self.outputs)
+
+        # print('>inputs')
+        # print(self.inputs)
+        # print('>outputs')
+        # print(self.outputs)
+
+        # TODO unify a config of input features & their labels between plotting, fitting, and prediction
+        labels = [
+            'target x',
+            'ball x'
         ]
+        self.plot = [ plt.scatter(list(zip(*self.inputs))[i], self.outputs, label=labels[i]) for i in range(len(self.inputs[0])) ]
         # self.plot = plt.scatter(self.inputs, self.outputs)
         plt.xlim(-3000,3000)
         plt.ylim(-3000,3000)
         # plt.title('Multiple Linear Regression Training Data')
-        plt.xlabel('Target ball x position')
+        plt.xlabel('Exploratory variables')
         plt.ylabel('Starting car x position')
+        self.ax.legend()
         # def update(frame):
         #     self.plot.set_offsets(np.c_[self.inputs, self.outputs])
         #     self.fig.canvas.draw()
@@ -120,8 +125,8 @@ class MyBot(BaseAgent):
             return
 
         # update plot
-        self.plot[0].set_offsets(np.c_[list(zip(*self.inputs))[0], self.outputs])
-        self.plot[1].set_offsets(np.c_[list(zip(*self.inputs))[1], self.outputs])
+        for i in range(len(self.inputs[0])):
+            self.plot[i].set_offsets(np.c_[list(zip(*self.inputs))[i], self.outputs]) 
         plt.draw()
         plt.pause(0.01)
 
@@ -169,6 +174,7 @@ class MyBot(BaseAgent):
             print('Skipping first iteration')
         if reset and train and self.skip_train_ticks <= 0 :
             print(f'>>> TRAINING ITERATION {self.iteration}')
+            # inputs = [ball_location.x]
             inputs = [ball_location.x, self.initial_ball_location.x]
             outputs = [self.initial_car_location.x]
             self.inputs.append(inputs)

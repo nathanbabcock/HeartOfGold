@@ -34,6 +34,13 @@ class MyBot(BaseAgent):
         self.plot = None
         self.fig = None
         self.axes = []
+        self.coefs = []
+        self.accuracies = []
+        self.accuracy_labels = [
+            'Calculation accuracy',
+            'Regression accuracy',
+            'Model mean squared error'
+        ]
 
         # init sklearn multi linear regression model
         self.model = LinearRegression()
@@ -42,7 +49,6 @@ class MyBot(BaseAgent):
         # Set up information about the boost pads now that the game is active and the info is available
         self.boost_pad_tracker.initialize_boosts(self.get_field_info())
         self.reset_gamestate()
-        # self.init_plot()
         print('> Alphabot: I N I T I A L I Z E D')
 
     def is_line_possible(self):
@@ -95,39 +101,33 @@ class MyBot(BaseAgent):
         return None
 
     def init_plot(self):
+        # Initialize plot
         print('> Initializing plot...')
         plt.clf()
         plt.close()
         plt.ion()
-        self.fig = plt.figure()
-        self.ax = self.fig.add_subplot()
+        self.fig, (self.ax1, self.ax2) = plt.subplots(2)
 
-        # print('>inputs')
-        # print(self.inputs)
-        # print('>outputs')
-        # print(self.outputs)
-
-        # TODO unify a config of input features & their labels between plotting, fitting, and prediction
+        # Graph inputs
         labels = [
             'target x',
             'target y',
             'ball x',
             'ball y'
         ]
-        self.plot = [ plt.scatter(list(zip(*self.inputs))[i], self.outputs, label=labels[i]) for i in range(len(self.inputs[0])) ]
-        # self.plot = plt.scatter(self.inputs, self.outputs)
-        plt.xlim(-3000,3000)
-        plt.ylim(-3000,3000)
-        # plt.title('Multiple Linear Regression Training Data')
-        plt.xlabel('Exploratory variables')
-        plt.ylabel('Starting car x position')
-        self.ax.legend()
-        # def update(frame):
-        #     self.plot.set_offsets(np.c_[self.inputs, self.outputs])
-        #     self.fig.canvas.draw()
-        #     plt.pause(0.01)
-        #     return
-        # animation = FuncAnimation(self.fig, update, interval=16)
+        self.plot = [ self.ax1.scatter(list(zip(*self.inputs))[i], self.outputs, label=labels[i]) for i in range(len(self.inputs[0])) ]
+        self.ax1.set_xlim(-3000,3000)
+        self.ax1.set_ylim(-3000,3000)
+        # plt.xlabel('Exploratory variables')
+        # plt.ylabel('Starting car x position')
+        self.ax1.legend()
+
+        # Coefs
+        self.coef_plot = [ self.ax2.plot(i, list(zip(*self.coefs))[i], label=f'{labels[i]} coef')[0] for i in range(len(self.coefs[0])) ]
+        self.ax2.set_ylim(-2,2)
+        self.ax2.legend()
+
+        # show
         plt.show()
         return self.plot
 
@@ -138,9 +138,17 @@ class MyBot(BaseAgent):
         if not self.plot:
             return
 
-        # update plot
+        # update input plot
         for i in range(len(self.inputs[0])):
-            self.plot[i].set_offsets(np.c_[list(zip(*self.inputs))[i], self.outputs]) 
+            self.plot[i].set_offsets(np.c_[list(zip(*self.inputs))[i], self.outputs])
+
+        # update coef plot
+        for i in range(len(self.coefs[0])):
+            self.coef_plot[i].set_xdata(range(self.iteration))
+            self.coef_plot[i].set_ydata([coef[i] for coef in self.coefs])
+        self.ax2.set_xlim(0, self.iteration)
+        
+        # draw
         plt.draw()
         plt.pause(0.01)
 
@@ -176,60 +184,51 @@ class MyBot(BaseAgent):
             train = False
             print('> Scrapping bad data')
         
-        # Check if it hit the target
-        # if ball_location.dist(self.training_target_location) < 200:
-        #     reset = True
+        # Episode completed sucessfully
         if ball_location.y > self.training_target_location.y:
             reset = True
+
+        # Skip first iteration
         if reset and self.iteration == 0:
             train = False
             self.iteration += 1
             self.skip_train_ticks = 10
-            print('Skipping first iteration')
+            print('Skipping iteration')
+
+        # Train
         if reset and train and self.skip_train_ticks <= 0 :
             print(f'>>> TRAINING ITERATION {self.iteration}')
-            # inputs = [ball_location.x]
             inputs = [ball_location.x, ball_location.y, self.initial_ball_location.x, self.initial_ball_location.y]
             outputs = [self.initial_car_location.x]
-            self.inputs.append(inputs)
-            self.outputs.append(outputs)
-            self.model.fit(self.inputs, self.outputs)
-
-            self.draw_plot()
             print(f'> Training Input: {inputs}')
             print(f'> Training Output: {outputs}')
+            self.inputs.append(inputs)
+            self.outputs.append(outputs)
+
+            # Fit model
+            self.model.fit(self.inputs, self.outputs)
+
+            # Collect metrics
+            print(f'> Coefs: {self.model.coef_[0]}')
+            self.coefs.append(self.model.coef_[0])
+
+            # Plot
+            self.draw_plot()
+
+            # Increment & delay until next iteration
             self.iteration += 1
             self.skip_train_ticks = 10
 
-        # We're far away from the ball, let's try to lead it a little bit
-        # if car_location.dist(ball_location) > 1500:
-        #     ball_prediction = self.get_ball_prediction_struct() # This can predict bounces, etc
-        #     ball_in_future = find_slice_at_time(ball_prediction, packet.game_info.seconds_elapsed + 2)
-        #     target_location = Vec3(ball_in_future.physics.location)
-        #     self.renderer.draw_line_3d(ball_location, target_location, self.renderer.cyan())
-        # else:
-        #     target_location = ball_location
-
-        # Draw some things to help understand what the bot is thinking
+        # Rendering
         self.renderer.draw_rect_3d(self.training_target_location, 8, 8, True, self.renderer.green(), centered=True)
-        # self.renderer.draw_rect_3d(self.intermediate_destination, 8, 8, True, self.renderer.cyan(), centered=True)
         if self.cur_destination == 'ball':
             self.renderer.draw_line_3d(car_location, ball_location, self.renderer.white())
         else:
             self.renderer.draw_line_3d(car_location, self.intermediate_destination, self.renderer.white())
         self.renderer.draw_line_3d(ball_location, self.training_target_location, self.renderer.green())
         self.renderer.draw_string_2d(20, 20, 2, 2, f'Iteration: {self.iteration}', self.renderer.black())
-        # self.renderer.draw_line_3d(car_location, target_location, self.renderer.white())
-        # self.renderer.draw_string_3d(car_location, 1, 1, f'Speed: {car_velocity.length():.1f}', self.renderer.white())
-        # self.renderer.draw_rect_3d(target_location, 8, 8, True, self.renderer.cyan(), centered=True)
-        # self.renderer.draw_rect_3d(training_target_location, 8, 8, True, self.renderer.cyan(), centered=True)
-        # self.renderer.draw_line_3d(ball_location, training_target_location, self.renderer.white())
-        # self.renderer.draw_string_3d(training_target_location, 1, 1, f'Distance: {training_target_location.dist(ball_location):.1f}', self.renderer.white())
 
-        # if 750 < car_velocity.length() < 800:
-        #     # We'll do a front flip if the car is moving at a certain speed.
-        #     return self.begin_front_flip(packet)
-
+        # Controller state
         controls = SimpleControllerState()
         if reset:
             self.reset_gamestate()
@@ -238,8 +237,6 @@ class MyBot(BaseAgent):
             self.cur_destination = 'ball'
         controls.steer = steer_toward_target(my_car, ball_location if self.cur_destination=='ball' else self.intermediate_destination)
         controls.throttle = 1.0
-        # controls.boost = True
-
         return controls
 
     def begin_front_flip(self, packet):

@@ -62,14 +62,14 @@ class MyBot(BaseAgent):
         y_2 = self.training_target_location.y
         self.output_calculated = (self.initial_car_y - y_1) * ((x_2 - x_1) / (y_2 - y_1)) + x_1
 
-        return -3000 <= self.output_calculated <= 3000
+        return -4000 <= self.output_calculated <= 4000
 
     def randomize_input_state(self):
-        self.initial_ball_location = Vector3(randint(-1500, 1500), randint(-1000, 1000), 100)
-        self.training_target_location = Vec3(x=randint(-3000, 3000), y=randint(1000, 3000), z=0)
+        self.initial_ball_location = Vector3(randint(-4000, 4000), randint(-2000, 2000), 100)
+        self.training_target_location = Vec3(randint(-4000, 4000), randint(2000, 4000),  0)
 
     def reset_gamestate(self):
-        self.initial_car_y = -3000
+        self.initial_car_y = -4000
         
         # Get a set of inputs that has a possible output
         self.randomize_input_state()
@@ -78,14 +78,14 @@ class MyBot(BaseAgent):
         print(f'> Calculation output: {self.output_calculated}')
 
         # Predict
-        if (self.iteration > 2):
+        if (self.iteration > 100):
             inputs = [[self.training_target_location.x,  self.training_target_location.y, self.initial_ball_location.x, self.initial_ball_location.y]]
             prediction = self.model.predict(inputs)
             print(f'> Prediction input: {inputs}')
             print(f'> Prediction output: {prediction}')
             self.initial_car_location = Vector3(prediction, self.initial_car_y, 0)
         else:
-            self.initial_car_location = Vector3(randint(-3000, 3000), self.initial_car_y, 0)
+            self.initial_car_location = Vector3(randint(-4000, 4000), self.initial_car_y, 0)
         self.cur_destination = 'ball'
 
         # line care up with ball to avoid error from turning
@@ -106,7 +106,7 @@ class MyBot(BaseAgent):
         plt.clf()
         plt.close()
         plt.ion()
-        self.fig, (self.ax1, self.ax2, self.ax3) = plt.subplots(3)
+        self.fig, self.axes = plt.subplots(2)
 
         # Graph inputs
         labels = [
@@ -115,26 +115,27 @@ class MyBot(BaseAgent):
             'ball x',
             'ball y'
         ]
-        self.plot = [ self.ax1.scatter(list(zip(*self.inputs))[i], self.outputs, label=labels[i]) for i in range(len(self.inputs[0])) ]
-        self.ax1.set_xlim(-3000,3000)
-        self.ax1.set_ylim(-3000,3000)
-        self.ax1.legend()
+        self.plot = [ self.axes[0].scatter(list(zip(*self.inputs))[i], self.outputs, label=labels[i]) for i in range(len(self.inputs[0])) ]
+        self.axes[0].set_xlim(-3000,3000)
+        self.axes[0].set_ylim(-3000,3000)
+        self.axes[0].legend()
 
         # Coefs
-        self.coef_plot = [ self.ax2.plot(i, list(zip(*self.coefs))[i], label=f'{labels[i]} coef')[0] for i in range(len(self.coefs[0])) ]
-        self.ax2.set_ylim(-2,2)
-        self.ax2.legend()
+        self.coef_plot = [ self.axes[1].plot(i, list(zip(*self.coefs))[i], label=f'{labels[i]} coef')[0] for i in range(len(self.coefs[0])) ]
+        self.axes[1].set_ylim(-3, 3)
+        self.axes[1].legend()
 
         # Accuracies
-        accuracy_labels = [
-            'distance from target',
-            'prediction from calculation',
-        ]
-        self.acc_plot = [ self.ax3.plot(i, list(zip(*self.accuracies))[i], label=accuracy_labels[i])[0] for i in range(len(self.accuracies[0])) ]
-        self.ax3.set_ylim(-1,1)
-        self.ax3.legend()
+        # accuracy_labels = [
+        #     'distance from target',
+        #     'prediction from calculation',
+        # ]
+        # self.acc_plot = [ self.axes[2].plot(i, list(zip(*self.accuracies))[i], label=accuracy_labels[i])[0] for i in range(len(self.accuracies[0])) ]
+        # self.axes[2].set_ylim(-1,1)
+        # self.axes[2].legend()
 
         # show
+        plt.grid(True, axis='both')
         plt.show()
         return self.plot
 
@@ -153,13 +154,13 @@ class MyBot(BaseAgent):
         for i in range(len(self.coefs[0])):
             self.coef_plot[i].set_xdata(range(self.iteration))
             self.coef_plot[i].set_ydata([coef[i] for coef in self.coefs])
-        self.ax2.set_xlim(0, self.iteration)
+        self.axes[1].set_xlim(0, self.iteration)
 
         # update acc plot
-        for i in range(len(self.accuracies[0])):
-            self.acc_plot[i].set_xdata(range(self.iteration))
-            self.acc_plot[i].set_ydata([acc[i] for acc in self.accuracies])
-        self.ax3.set_xlim(0, self.iteration)
+        # for i in range(len(self.accuracies[0])):
+        #     self.acc_plot[i].set_xdata(range(self.iteration))
+        #     self.acc_plot[i].set_ydata([acc[i] for acc in self.accuracies])
+        # self.axes[2].set_xlim(0, self.iteration)
         
         # draw
         plt.draw()

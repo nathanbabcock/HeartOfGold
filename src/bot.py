@@ -106,7 +106,7 @@ class MyBot(BaseAgent):
         plt.clf()
         plt.close()
         plt.ion()
-        self.fig, (self.ax1, self.ax2) = plt.subplots(2)
+        self.fig, (self.ax1, self.ax2, self.ax3) = plt.subplots(3)
 
         # Graph inputs
         labels = [
@@ -118,14 +118,21 @@ class MyBot(BaseAgent):
         self.plot = [ self.ax1.scatter(list(zip(*self.inputs))[i], self.outputs, label=labels[i]) for i in range(len(self.inputs[0])) ]
         self.ax1.set_xlim(-3000,3000)
         self.ax1.set_ylim(-3000,3000)
-        # plt.xlabel('Exploratory variables')
-        # plt.ylabel('Starting car x position')
         self.ax1.legend()
 
         # Coefs
         self.coef_plot = [ self.ax2.plot(i, list(zip(*self.coefs))[i], label=f'{labels[i]} coef')[0] for i in range(len(self.coefs[0])) ]
         self.ax2.set_ylim(-2,2)
         self.ax2.legend()
+
+        # Accuracies
+        accuracy_labels = [
+            'distance from target',
+            'prediction from calculation',
+        ]
+        self.acc_plot = [ self.ax3.plot(i, list(zip(*self.accuracies))[i], label=accuracy_labels[i])[0] for i in range(len(self.accuracies[0])) ]
+        self.ax3.set_ylim(-1,1)
+        self.ax3.legend()
 
         # show
         plt.show()
@@ -147,6 +154,12 @@ class MyBot(BaseAgent):
             self.coef_plot[i].set_xdata(range(self.iteration))
             self.coef_plot[i].set_ydata([coef[i] for coef in self.coefs])
         self.ax2.set_xlim(0, self.iteration)
+
+        # update acc plot
+        for i in range(len(self.accuracies[0])):
+            self.acc_plot[i].set_xdata(range(self.iteration))
+            self.acc_plot[i].set_ydata([acc[i] for acc in self.accuracies])
+        self.ax3.set_xlim(0, self.iteration)
         
         # draw
         plt.draw()
@@ -208,9 +221,13 @@ class MyBot(BaseAgent):
             # Fit model
             self.model.fit(self.inputs, self.outputs)
 
-            # Collect metrics
-            print(f'> Coefs: {self.model.coef_[0]}')
+            # Metrics: coefficients
             self.coefs.append(self.model.coef_[0])
+
+            # Metrics: arbitrary accuracy
+            target_accuracy = ball_location.dist(self.training_target_location) / self.training_target_location.dist(self.initial_car_location)
+            prediction_accuracy = (self.initial_car_location.x - self.output_calculated) / self.output_calculated
+            self.accuracies.append([target_accuracy, prediction_accuracy])
 
             # Plot
             self.draw_plot()

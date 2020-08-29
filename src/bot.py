@@ -45,43 +45,53 @@ class MyBot(BaseAgent):
         # self.init_plot()
         print('> Alphabot: I N I T I A L I Z E D')
 
-    def reset_gamestate(self):
-        # self.initial_ball_location = Vector3(0, 0, 100)
-        # self.initial_ball_location = Vector3(randint(-1500, 1500), 0, 100)
+    def is_line_possible(self):
+        if not self.initial_ball_location or not self.training_target_location:
+            return False
+
+        # Point-point form to calculate correct predicted input
+        x_1 = self.initial_ball_location.x
+        y_1 = self.initial_ball_location.y
+        x_2 = self.training_target_location.x
+        y_2 = self.training_target_location.y
+        self.output_calculated = (self.initial_car_y - y_1) * ((x_2 - x_1) / (y_2 - y_1)) + x_1
+
+        return -3000 <= self.output_calculated <= 3000
+
+    def randomize_input_state(self):
         self.initial_ball_location = Vector3(randint(-1500, 1500), randint(-1000, 1000), 100)
-
-        # self.initial_car_location = Vector3(randint(-3000, 3000), -4000, 0)
-        # self.initial_car_location = Vector3(-3000, -4000, 0)
-        # self.training_target_location = Vec3(x=randint(-3000, 3000), y=3000, z=0)
         self.training_target_location = Vec3(x=randint(-3000, 3000), y=randint(1000, 3000), z=0)
-        # self.training_target_location = Vec3(x=1000, y=3000, z=0)
 
+    def reset_gamestate(self):
+        self.initial_car_y = -3000
+        
+        # Get a set of inputs that has a possible output
+        self.randomize_input_state()
+        while not self.is_line_possible():
+            self.randomize_input_state()
+        print(f'> Calculation output: {self.output_calculated}')
+
+        # Predict
         if (self.iteration > 2):
-            # inputs = [[self.training_target_location.x]]
             inputs = [[self.training_target_location.x,  self.training_target_location.y, self.initial_ball_location.x, self.initial_ball_location.y]]
             prediction = self.model.predict(inputs)
-            print(f'> Prediction Input: {inputs}')
-            print(f'> Prediction Output: {prediction}')
-            # self.intermediate_destination = Vec3(x=prediction[0], y=prediction[1], z=0)
-            self.initial_car_location = Vector3(prediction, -3000, 0)
+            print(f'> Prediction input: {inputs}')
+            print(f'> Prediction output: {prediction}')
+            self.initial_car_location = Vector3(prediction, self.initial_car_y, 0)
         else:
-            # self.intermediate_destination = Vec3(x=randint(-2000, 2000), y=randint(-4000,0), z=0)
-            self.initial_car_location = Vector3(randint(-3000, 3000), -3000, 0)
-        # self.cur_destination = 'intermediate'
+            self.initial_car_location = Vector3(randint(-3000, 3000), self.initial_car_y, 0)
         self.cur_destination = 'ball'
 
+        # line care up with ball to avoid error from turning
         ang = (Vec3(self.initial_ball_location) - Vec3(self.initial_car_location)).ang_to(Vec3(1,0,0))
-        # print(ang)
 
-        car_state = CarState(jumped=False, double_jumped=False, boost_amount=0, 
+        # Set gamestate
+        car_state = CarState(boost_amount=100, 
                      physics=Physics(location=self.initial_car_location, velocity=Vector3(0, 0, 0), rotation=Rotator(0, ang, 0),
                      angular_velocity=Vector3(0, 0, 0)))
-
         ball_state = BallState(Physics(location=self.initial_ball_location, velocity=Vector3(0, 0, 0), rotation=Rotator(0, 0, 0), angular_velocity=Vector3(0, 0, 0)))
         game_state = GameState(ball=ball_state, cars={self.index: car_state})
-        # game_info_state = GameInfoState(world_gravity_z=700, game_speed=0.8)
         self.set_game_state(game_state)
-
         return None
 
     def init_plot(self):

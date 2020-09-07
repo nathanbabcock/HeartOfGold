@@ -88,6 +88,7 @@ class MyBot(BaseAgent):
     def randomize_input_state(self):
         # self.initial_ball_location = Vector3(randint(-4000, 4000), randint(-2000, 2000), 100)
         # self.training_target_location = Vec3(randint(-4000, 4000), randint(2000, 4000),  0)
+        self.cur_tries = 0
         self.initial_car_y = -4000
         self.initial_ball_location = Vector3(1000, 0, 100)
         self.training_target_location = Vec3(randint(-3000, 3000), 3000, 0)
@@ -274,10 +275,16 @@ class MyBot(BaseAgent):
         train = True
 
         # Experiments constraints violated (going past the ball)
-        if(car_location.y > ball_location.y):
+        if car_location.y > ball_location.y:
             reset = True
             train = False
             print('> Scrapping bad data')
+
+        if self.cur_tries > 5:
+            reset = True
+            train = False
+            self.randomize_input_state()
+            print('> Maximum tries exceeded; resetting')
         
         # Episode completed sucessfully
         if ball_location.y > self.training_target_location.y:
@@ -329,6 +336,7 @@ class MyBot(BaseAgent):
 
             # Increment & delay until next iteration
             self.iteration += 1
+            self.cur_tries += 1
             self.skip_train_ticks = 10
 
         # Rendering

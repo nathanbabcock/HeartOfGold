@@ -9,7 +9,7 @@ from util.drive import steer_toward_target
 from util.sequence import Sequence, ControlStep
 from util.vec import Vec3
 
-from math import pi
+from math import pi, sqrt, inf
 from random import randint
 import numpy as np
 
@@ -21,6 +21,25 @@ import numpy as np
 from sklearn.linear_model import LinearRegression
 import matplotlib.pyplot as plt
 from matplotlib.animation import FuncAnimation
+
+class TrainingState:
+    def __init__(self, ballX=None, ballY=None, carX=None, carY=None, targetX=None, targetY=None):
+        self.ballX = ballX
+        self.ballY = ballY
+        self.carX = carX
+        self.carY = carY
+        self.targetX = targetX
+        self.targetY = targetY
+
+    def dist(self, other):
+        dist = 0
+        if self.ballX and self.ballY and other.ballX and other.ballY:
+            dist += sqrt((other.ballY - self.ballY)**2 + (other.ballX - self.ballX)**2)
+        if self.carX and self.carY and other.carX and other.carY:
+            dist += sqrt((other.carY - self.carY)**2 + (other.carX - self.carX)**2)
+        if self.targetX and self.targetY and other.targetX and other.targetY:
+            dist += sqrt((other.targetY - self.targetY)**2 + (other.targetX - self.targetX)**2)
+        return dist
 
 class MyBot(BaseAgent):
     def __init__(self, name, team, index):
@@ -41,6 +60,7 @@ class MyBot(BaseAgent):
             'Regression accuracy',
             'Model mean squared error'
         ]
+        self.training_states = []
 
         # init sklearn multi linear regression model
         self.model = LinearRegression()
@@ -48,6 +68,7 @@ class MyBot(BaseAgent):
     def initialize_agent(self):
         # Set up information about the boost pads now that the game is active and the info is available
         self.boost_pad_tracker.initialize_boosts(self.get_field_info())
+        self.randomize_input_state()
         self.reset_gamestate()
         print('> Alphabot: I N I T I A L I Z E D')
 
@@ -65,30 +86,86 @@ class MyBot(BaseAgent):
         return -4000 <= self.output_calculated <= 4000
 
     def randomize_input_state(self):
-        self.initial_ball_location = Vector3(randint(-4000, 4000), randint(-2000, 2000), 100)
-        self.training_target_location = Vec3(randint(-4000, 4000), randint(2000, 4000),  0)
-
-    def reset_gamestate(self):
+        # self.initial_ball_location = Vector3(randint(-4000, 4000), randint(-2000, 2000), 100)
+        # self.training_target_location = Vec3(randint(-4000, 4000), randint(2000, 4000),  0)
         self.initial_car_y = -4000
-        
-        # Get a set of inputs that has a possible output
-        self.randomize_input_state()
+        self.initial_ball_location = Vector3(1000, 0, 100)
+        self.training_target_location = Vec3(randint(-3000, 3000), 3000, 0)
         while not self.is_line_possible():
-            self.randomize_input_state()
+            return self.randomize_input_state()
         print(f'> Calculation output: {self.output_calculated}')
+        # self.training_target_location = Vec3(-250, 3000,  0)
+
+    def get_cur_state(self):
+        return TrainingState(
+            ballX = self.initial_ball_location.x,
+            ballY = self.initial_ball_location.y,
+            carX = self.initial_car_location.x,
+            carY = self.initial_car_location.y,
+            targetX = self.training_target_location.x,
+            targetY = self.training_target_location.y,
+        )
+
+    def get_closest_sample(self, state):
+        samples = map(lambda x: [x, x.dist(state)], self.training_states)
+        samples = sorted(samples, key=lambda x: x[1])
+        bestDist = samples[0][1]
+        print(f'> closest state distance: {bestDist}')
+
+        # POC assumption: sample.targetX is used for narrowing search
+
+        highSample = None
+        lowSample = None
+
+        for sample in samples:
+            if sample[0].targetX > self.training_target_location.x:
+                highSample = sample
+                break
+        for sample in samples:
+            if sample[0].targetX < self.training_target_location.x:
+                lowSample = sample
+                break
+        
+        # If it's close enough, return the best match
+        if bestDist < 100:
+            return samples[0][0]
+
+        if highSample is not None and lowSample is not None:
+            averageSample = TrainingState(
+                ballX = (highSample[0].ballX + lowSample[0].ballX)/2,
+                ballY = (highSample[0].ballY + lowSample[0].ballY)/2,
+                carX = (highSample[0].carX + lowSample[0].carX)/2,
+                carY = (highSample[0].carY + lowSample[0].carY)/2,
+                targetX = (highSample[0].targetX + lowSample[0].targetX)/2,
+                targetY = (highSample[0].targetY + lowSample[0].targetY)/2,
+            )
+            return averageSample
+        
+        return samples[0][0]
+
+    def reset_gamestate(self):     
+        # Get a set of inputs that has a possible output
+        # self.randomize_input_state()
+        # while not self.is_line_possible():
+        #     self.randomize_input_state()
+        # print(f'> Calculation output: {self.output_calculated}')
 
         # Predict
-        if (self.iteration > 100):
-            inputs = [[self.training_target_location.x,  self.training_target_location.y, self.initial_ball_location.x, self.initial_ball_location.y]]
-            prediction = self.model.predict(inputs)
-            print(f'> Prediction input: {inputs}')
-            print(f'> Prediction output: {prediction}')
-            self.initial_car_location = Vector3(prediction, self.initial_car_y, 0)
+        if self.iteration > 2:
+            # inputs = [[self.training_target_location.x,  self.training_target_location.y, self.initial_ball_location.x, self.initial_ball_location.y]]
+            prediction: TrainingState = self.get_closest_sample(state=TrainingState(targetX=self.training_target_location.x, targetY=self.training_target_location.y, ballX=self.initial_ball_location.x, ballY=self.initial_ball_location.y))
+            # print(f'> Prediction input: {inputs}')
+            print(f'> Prediction output: {prediction.carX}')
+            self.initial_car_location = Vector3(prediction.carX, self.initial_car_y, 0)
+        elif self.iteration == 2:
+            self.initial_car_location = Vector3(-3500, self.initial_car_y, 0)
+        elif self.iteration == 1:
+            self.initial_car_location = Vector3(3500, self.initial_car_y, 0)
         else:
             self.initial_car_location = Vector3(randint(-4000, 4000), self.initial_car_y, 0)
         self.cur_destination = 'ball'
 
-        # line care up with ball to avoid error from turning
+        # line car up with ball to avoid error from turning
         ang = (Vec3(self.initial_ball_location) - Vec3(self.initial_car_location)).ang_to(Vec3(1,0,0))
 
         # Set gamestate
@@ -101,6 +178,8 @@ class MyBot(BaseAgent):
         return None
 
     def init_plot(self):
+        return
+
         # Initialize plot
         print('> Initializing plot...')
         plt.clf()
@@ -140,6 +219,8 @@ class MyBot(BaseAgent):
         return self.plot
 
     def draw_plot(self):
+        return
+
         # init plot
         if not self.plot:
             self.init_plot()
@@ -201,6 +282,10 @@ class MyBot(BaseAgent):
         # Episode completed sucessfully
         if ball_location.y > self.training_target_location.y:
             reset = True
+            # print(f'checking reset with dist {ball_location.dist(self.training_target_location)}')
+            if abs(ball_location.x - self.training_target_location.x) < 100 and abs(ball_location.y - self.training_target_location.y) < 100:
+                print('Task succesfully learned; picking new target')
+                self.randomize_input_state()
 
         # Skip first iteration
         if reset and self.iteration == 0:
@@ -212,26 +297,35 @@ class MyBot(BaseAgent):
         # Train
         if reset and train and self.skip_train_ticks <= 0 :
             print(f'>>> TRAINING ITERATION {self.iteration}')
-            inputs = [ball_location.x, ball_location.y, self.initial_ball_location.x, self.initial_ball_location.y]
-            outputs = [self.initial_car_location.x]
-            print(f'> Training Input: {inputs}')
-            print(f'> Training Output: {outputs}')
-            self.inputs.append(inputs)
-            self.outputs.append(outputs)
+            # inputs = [ball_location.x, ball_location.y, self.initial_ball_location.x, self.initial_ball_location.y]
+            # outputs = [self.initial_car_location.x]
+            # print(f'> Training Input: {inputs}')
+            # print(f'> Training Output: {outputs}')
+            # self.inputs.append(inputs)
+            # self.outputs.append(outputs)
 
-            # Fit model
-            self.model.fit(self.inputs, self.outputs)
+            # # Fit model
+            # self.model.fit(self.inputs, self.outputs)
 
-            # Metrics: coefficients
-            self.coefs.append(self.model.coef_[0])
+            # # Metrics: coefficients
+            # self.coefs.append(self.model.coef_[0])
 
-            # Metrics: arbitrary accuracy
-            target_accuracy = ball_location.dist(self.training_target_location) / self.training_target_location.dist(self.initial_car_location)
-            prediction_accuracy = (self.initial_car_location.x - self.output_calculated) / self.output_calculated
-            self.accuracies.append([target_accuracy, prediction_accuracy])
+            # # Metrics: arbitrary accuracy
+            # target_accuracy = ball_location.dist(self.training_target_location) / self.training_target_location.dist(self.initial_car_location)
+            # prediction_accuracy = (self.initial_car_location.x - self.output_calculated) / self.output_calculated
+            # self.accuracies.append([target_accuracy, prediction_accuracy])
 
-            # Plot
-            self.draw_plot()
+            # # Plot
+            # self.draw_plot()
+            curState = TrainingState(
+                ballX = self.initial_ball_location.x,
+                ballY = self.initial_ball_location.y,
+                carX = self.initial_car_location.x,
+                carY = self.initial_car_location.y,
+                targetX = ball_location.x,
+                targetY = ball_location.y,
+            )
+            self.training_states.append(curState)
 
             # Increment & delay until next iteration
             self.iteration += 1

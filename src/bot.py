@@ -41,6 +41,17 @@ class TrainingState:
             dist += sqrt((other.targetY - self.targetY)**2 + (other.targetX - self.targetX)**2)
         return dist
 
+
+
+class HitData:
+    def __init__(self, car_direction_before=None, ball_direction_after=None, car_speed_before=None, ball_speed_before=None):
+        self.car_direction_before = car_direction_before
+        self.ball_direction_after = ball_direction_after
+
+        # not used yet
+        self.car_speed_before = car_speed_before
+        self.ball_speed_before = ball_speed_before
+
 class MyBot(BaseAgent):
     def __init__(self, name, team, index):
         super().__init__(name, team, index)
@@ -61,9 +72,11 @@ class MyBot(BaseAgent):
             'Model mean squared error'
         ]
         self.training_states = []
+        self.lastPrediction = None
 
-        # init sklearn multi linear regression model
-        self.model = LinearRegression()
+        self.last_touch_location = Vector3(0, 0, 0)
+        self.hit_data = []
+        self.pre_hit = HitData()
 
     def initialize_agent(self):
         # Set up information about the boost pads now that the game is active and the info is available
@@ -86,12 +99,12 @@ class MyBot(BaseAgent):
         return -4000 <= self.output_calculated <= 4000
 
     def randomize_input_state(self):
-        # self.initial_ball_location = Vector3(randint(-4000, 4000), randint(-2000, 2000), 100)
-        # self.training_target_location = Vec3(randint(-4000, 4000), randint(2000, 4000),  0)
         self.cur_tries = 0
         self.initial_car_y = -4000
-        self.initial_ball_location = Vector3(1000, 0, 100)
-        self.training_target_location = Vec3(randint(-3000, 3000), 3000, 0)
+        self.initial_ball_location = Vector3(randint(-4000, 4000), randint(-2000, 2000), 100)
+        self.training_target_location = Vec3(randint(-4000, 4000), randint(2000, 4000),  0)
+        # self.initial_ball_location = Vector3(1000, 0, 100)
+        # self.training_target_location = Vec3(randint(-3000, 3000), 3000, 0)
         while not self.is_line_possible():
             return self.randomize_input_state()
         print(f'> Calculation output: {self.output_calculated}')
@@ -144,7 +157,7 @@ class MyBot(BaseAgent):
         
         return samples[0][0]
 
-    def reset_gamestate(self):     
+    def reset_gamestate(self):
         # Get a set of inputs that has a possible output
         # self.randomize_input_state()
         # while not self.is_line_possible():
@@ -152,17 +165,28 @@ class MyBot(BaseAgent):
         # print(f'> Calculation output: {self.output_calculated}')
 
         # Predict
-        if self.iteration > 2:
+        if self.iteration > 100:
             # inputs = [[self.training_target_location.x,  self.training_target_location.y, self.initial_ball_location.x, self.initial_ball_location.y]]
             prediction: TrainingState = self.get_closest_sample(state=TrainingState(targetX=self.training_target_location.x, targetY=self.training_target_location.y, ballX=self.initial_ball_location.x, ballY=self.initial_ball_location.y))
             # print(f'> Prediction input: {inputs}')
+
             print(f'> Prediction output: {prediction.carX}')
+
+            if prediction.carX == self.lastPrediction:
+                print('Stuck in a local minimum; resetting')
+                self.lastPrediction = None
+                self.randomize_input_state()
+                return self.reset_gamestate()
+            else:
+                self.lastPrediction = prediction.carX
+
             self.initial_car_location = Vector3(prediction.carX, self.initial_car_y, 0)
         elif self.iteration == 2:
             self.initial_car_location = Vector3(-3500, self.initial_car_y, 0)
         elif self.iteration == 1:
             self.initial_car_location = Vector3(3500, self.initial_car_y, 0)
         else:
+            self.randomize_input_state()
             self.initial_car_location = Vector3(randint(-4000, 4000), self.initial_car_y, 0)
         self.cur_destination = 'ball'
 
@@ -249,10 +273,6 @@ class MyBot(BaseAgent):
         plt.pause(0.01)
 
     def get_output(self, packet: GameTickPacket) -> SimpleControllerState:
-        """
-        This function will be called by the framework many times per second. This is where you can
-        see the motion of the ball, etc. and return controls to drive your car.
-        """
         if self.skip_train_ticks > 0:
             self.skip_train_ticks -= 1
 
@@ -270,14 +290,30 @@ class MyBot(BaseAgent):
         my_car = packet.game_cars[self.index]
         car_location = Vec3(my_car.physics.location)
         car_velocity = Vec3(my_car.physics.velocity)
+        car_direction = car_velocity.ang_to(Vec3(1, 0, 0)) if car_velocity.length() > 0 else 0
         ball_location = Vec3(packet.game_ball.physics.location)
+        ball_velocity = Vec3(packet.game_ball.physics.velocity)
+        ball_direction = ball_velocity.ang_to(Vec3(1, 0, 0)) if ball_velocity.length() > 0 else 0
         reset = False
         train = True
+
+        # Check for car hit ball
+        # if self.last_touch_location.x != packet.game_ball.latest_touch.hit_location.x or self.last_touch_location.y != packet.game_ball.latest_touch.hit_location.y or self.last_touch_location.z != packet.game_ball.latest_touch.hit_location.z:
+        if self.last_touch_location != packet.game_ball.latest_touch.hit_location:
+            self.pre_hit.ball_direction_after = ball_direction
+            self.hit_data.append(self.pre_hit)
+            self.last_touch_location = Vec3(packet.game_ball.latest_touch.hit_location)
+            print(packet.game_ball.latest_touch.hit_location)
+            print(f'HIT! car direction before={self.pre_hit.car_direction_before}, ball direction after={self.pre_hit.ball_direction_after}');
+            self.pre_hit = HitData()
+        else:
+            self.pre_hit.car_direction_before = car_direction
 
         # Experiments constraints violated (going past the ball)
         if car_location.y > ball_location.y:
             reset = True
             train = False
+            self.cur_tries = 999
             print('> Scrapping bad data')
 
         if self.cur_tries > 5:
@@ -347,6 +383,8 @@ class MyBot(BaseAgent):
             self.renderer.draw_line_3d(car_location, self.intermediate_destination, self.renderer.white())
         self.renderer.draw_line_3d(ball_location, self.training_target_location, self.renderer.green())
         self.renderer.draw_string_2d(20, 20, 2, 2, f'Iteration: {self.iteration}', self.renderer.black())
+        self.renderer.draw_string_2d(20, 50, 2, 2, f'Car velocity: {car_velocity.length()}', self.renderer.black())
+        self.renderer.draw_string_2d(20, 100, 2, 2, f'Last touch: {packet.game_ball.latest_touch.hit_location}', self.renderer.black())
 
         # Controller state
         controls = SimpleControllerState()
@@ -357,6 +395,7 @@ class MyBot(BaseAgent):
             self.cur_destination = 'ball'
         controls.steer = steer_toward_target(my_car, ball_location if self.cur_destination=='ball' else self.intermediate_destination)
         controls.throttle = 1.0
+        # controls.boost = True
         return controls
 
     def begin_front_flip(self, packet):

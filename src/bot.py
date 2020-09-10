@@ -12,6 +12,9 @@ from util.vec import Vec3
 from math import pi, sqrt, inf
 from random import randint
 
+from rlutilities.simulation import Ball, Car, Field, Game, Input
+from rlutilities.linear_algebra import vec3, dot
+
 class HitData:
     def __init__(self, car_direction_before=None, ball_direction_after=None, car_speed_before=None, ball_speed_before=None):
         self.car_direction_before = car_direction_before
@@ -21,6 +24,20 @@ class HitData:
         self.car_speed_before = car_speed_before
         self.ball_speed_before = ball_speed_before
 
+def veclen(vec: vec3):
+    return sqrt(vec[0]**2 + vec[1]**2 + vec[2]**2)
+
+def closest_point_on_obb(obb, vec):
+    # get the local coordinates of b
+    vec_local = dot(vec - obb.center, obb.orientation)
+
+    # clip those coordinates to find the closest point (in local coordinates)
+    closest_local = vec3(min(max(vec_local[0], -obb.half_width[0]), obb.half_width[0]), min(max(vec_local[1], -obb.half_width[1]), obb.half_width[1]), min(max(vec_local[2], -obb.half_width[2]), obb.half_width[2]))
+
+    # transform back to world coordinates
+    return dot(obb.orientation, closest_local) + obb.center
+  
+
 class MyBot(BaseAgent):
     def __init__(self, name, team, index):
         super().__init__(name, team, index)
@@ -29,6 +46,10 @@ class MyBot(BaseAgent):
         self.last_touch_location = Vector3(0, 0, 0)
         self.hit_data = []
         self.pre_hit = HitData()
+        
+        # Initialize simulation game model
+        Game.set_mode('soccar')
+        self.game = Game(index, team)
 
     def initialize_agent(self):
         self.reset_gamestate()
@@ -51,7 +72,6 @@ class MyBot(BaseAgent):
         self.set_game_state(game_state)
         return None
 
-
     def get_output(self, packet: GameTickPacket) -> SimpleControllerState:
         # This is good to keep at the beginning of get_output. It will allow you to continue
         # any sequences that you may have started during a previous call to get_output.
@@ -71,10 +91,46 @@ class MyBot(BaseAgent):
         reset = False
         train = True
 
+        # Update simulation
+        self.game.read_game_information(packet, self.get_rigid_body_tick(), self.get_field_info())
+
+        # make a copy of the ball's info that we can change
+        b = Ball(self.game.ball)
+        c = Car(self.game.cars[0])
+
+        print(f'c.location before {c.location}')
+        print(f'hitbox {c.hitbox()}')
+        contact_point = closest_point_on_obb(c.hitbox(), b.location)
+        print(f'contact point {contact_point}')
+        translation_vector = b.location - contact_point
+        print(f'translation vector {translation_vector}')
+        length = veclen(translation_vector)
+        print(f'veclen {length}')
+        newlen = length - b.collision_radius
+        print(f'newlen {newlen}')
+        ratio = newlen / length
+        print(f'ratio {ratio}')
+        translation_vector *= ratio
+        print(f'translation_vector {translation_vector}')
+        c.location += translation_vector
+        print(f'c.location after {c.location}')
+        c.location += c.velocity * (1.0 / 120.0)
+        # self.set_game_state(GameState(cars={self.index:CarState(physics=Physics(location=Vector3(c.location[0], c.location[1], c.location[2])))}))
+
+        ball_predictions = []
+        for i in range(360):
+
+            # simulate the forces acting on the ball for 1 frame
+            b.step(1.0 / 120.0, c)
+
+            # and add a copy of new ball position to the list of predictions
+            ball_predictions.append(vec3(b.location))
+
         # Check for car hit ball
         if self.last_touch_location != packet.game_ball.latest_touch.hit_location:
             self.pre_hit.ball_direction_after = ball_direction
             self.hit_data.append(self.pre_hit)
+            self.iteration += 1
             self.last_touch_location = Vec3(packet.game_ball.latest_touch.hit_location)
             print(f'> BALL HIT')
             self.pre_hit = HitData()
@@ -101,10 +157,14 @@ class MyBot(BaseAgent):
         #     print('Skipping iteration')
 
         # Rendering
+        # self.renderer.begin_rendering()
+        self.renderer.draw_polyline_3d(ball_predictions, self.renderer.red())
+        # self.renderer.draw_polyline_3d(car_predictions, self.renderer.red())
         self.renderer.draw_rect_3d(self.training_target_location, 8, 8, True, self.renderer.green(), centered=True)
         self.renderer.draw_line_3d(car_location, ball_location, self.renderer.white())
         self.renderer.draw_line_3d(ball_location, self.training_target_location, self.renderer.green())
         self.renderer.draw_string_2d(20, 20, 2, 2, f'Iteration: {self.iteration}', self.renderer.black())
+        # self.renderer.end_rendering()
 
         # Controller state
         controls = SimpleControllerState()

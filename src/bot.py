@@ -43,9 +43,11 @@ class MyBot(BaseAgent):
         super().__init__(name, team, index)
         self.active_sequence: Sequence = None
         self.iteration = 0
-        self.last_touch_location = Vector3(0, 0, 0)
+        self.last_touch_location = Vec3(0, 0, 0)
         self.hit_data = []
         self.pre_hit = HitData()
+        self.ball_predictions = []
+        self.not_hit_yet = True
         
         # Initialize simulation game model
         Game.set_mode('soccar')
@@ -59,6 +61,8 @@ class MyBot(BaseAgent):
         self.initial_ball_location = Vector3(0, 0, 100)
         self.initial_car_location = Vector3(3000, -3000, 0)
         self.training_target_location = Vec3(1000, 3000, 0)
+        self.not_hit_yet = True
+        self.ball_predictions = []
 
         # line car up with ball to avoid error from turning
         ang = (Vec3(self.initial_ball_location) - Vec3(self.initial_car_location)).ang_to(Vec3(1,0,0))
@@ -91,41 +95,6 @@ class MyBot(BaseAgent):
         reset = False
         train = True
 
-        # Update simulation
-        self.game.read_game_information(packet, self.get_rigid_body_tick(), self.get_field_info())
-
-        # make a copy of the ball's info that we can change
-        b = Ball(self.game.ball)
-        c = Car(self.game.cars[0])
-
-        print(f'c.location before {c.location}')
-        print(f'hitbox {c.hitbox()}')
-        contact_point = closest_point_on_obb(c.hitbox(), b.location)
-        print(f'contact point {contact_point}')
-        translation_vector = b.location - contact_point
-        print(f'translation vector {translation_vector}')
-        length = veclen(translation_vector)
-        print(f'veclen {length}')
-        newlen = length - b.collision_radius
-        print(f'newlen {newlen}')
-        ratio = newlen / length
-        print(f'ratio {ratio}')
-        translation_vector *= ratio
-        print(f'translation_vector {translation_vector}')
-        c.location += translation_vector
-        print(f'c.location after {c.location}')
-        c.location += c.velocity * (1.0 / 120.0)
-        # self.set_game_state(GameState(cars={self.index:CarState(physics=Physics(location=Vector3(c.location[0], c.location[1], c.location[2])))}))
-
-        ball_predictions = []
-        for i in range(360):
-
-            # simulate the forces acting on the ball for 1 frame
-            b.step(1.0 / 120.0, c)
-
-            # and add a copy of new ball position to the list of predictions
-            ball_predictions.append(vec3(b.location))
-
         # Check for car hit ball
         if self.last_touch_location != packet.game_ball.latest_touch.hit_location:
             self.pre_hit.ball_direction_after = ball_direction
@@ -134,8 +103,46 @@ class MyBot(BaseAgent):
             self.last_touch_location = Vec3(packet.game_ball.latest_touch.hit_location)
             print(f'> BALL HIT')
             self.pre_hit = HitData()
+            self.not_hit_yet = False
         else:
             self.pre_hit.car_direction_before = car_direction
+
+        # Update simulation
+        self.game.read_game_information(packet, self.get_rigid_body_tick(), self.get_field_info())
+
+        # Simulate the future hit
+        if self.not_hit_yet:
+            # make a copy of the ball's info that we can change
+            b = Ball(self.game.ball)
+            c = Car(self.game.cars[0])
+
+            # print(f'c.location before {c.location}')
+            # print(f'hitbox {c.hitbox()}')
+            # contact_point = closest_point_on_obb(c.hitbox(), b.location)
+            # # print(f'contact point {contact_point}')
+            translation_vector = vec3(b.location[0] - c.location[0], b.location[1] - c.location[1], 0)
+            # print(f'translation vector {translation_vector}')
+            length = veclen(translation_vector)
+            # print(f'veclen {length}')
+            newlen = length - b.collision_radius - c.hitbox().half_width[0]
+            # print(f'newlen {newlen}')
+            ratio = newlen / length
+            # print(f'ratio {ratio}')
+            translation_vector *= ratio
+            # print(f'translation_vector {translation_vector}')
+            c.location += translation_vector
+            # print(f'c.location after {c.location}')
+            c.location += c.velocity * (1.0 / 120.0)
+            # self.set_game_state(GameState(cars={self.index:CarState(physics=Physics(location=Vector3(c.location[0], c.location[1], c.location[2])))}))
+
+            self.ball_predictions = []
+            for i in range(360):
+
+                # simulate the forces acting on the ball for 1 frame
+                b.step(1.0 / 120.0, c)
+
+                # and add a copy of new ball position to the list of predictions
+                self.ball_predictions.append(vec3(b.location))
 
         # Reset if car passes ball
         if car_location.y > ball_location.y:
@@ -158,7 +165,8 @@ class MyBot(BaseAgent):
 
         # Rendering
         # self.renderer.begin_rendering()
-        self.renderer.draw_polyline_3d(ball_predictions, self.renderer.red())
+        if len(self.ball_predictions) > 2:
+            self.renderer.draw_polyline_3d(self.ball_predictions, self.renderer.red())
         # self.renderer.draw_polyline_3d(car_predictions, self.renderer.red())
         self.renderer.draw_rect_3d(self.training_target_location, 8, 8, True, self.renderer.green(), centered=True)
         self.renderer.draw_line_3d(car_location, ball_location, self.renderer.white())

@@ -9,11 +9,11 @@ from util.drive import steer_toward_target
 from util.sequence import Sequence, ControlStep
 from util.vec import Vec3
 
-from math import pi, sqrt, inf
+from math import pi, sqrt, inf, cos, sin, tan, atan2
 from random import randint
 
 from rlutilities.simulation import Ball, Car, Field, Game, Input
-from rlutilities.linear_algebra import vec3, dot
+from rlutilities.linear_algebra import vec3, mat3, dot, angle_between, rotation, rotation_to_axis, axis_to_rotation, euler_to_rotation, norm, vec2, look_at
 
 class HitData:
     def __init__(self, car_direction_before=None, ball_direction_after=None, car_speed_before=None, ball_speed_before=None):
@@ -24,8 +24,11 @@ class HitData:
         self.car_speed_before = car_speed_before
         self.ball_speed_before = ball_speed_before
 
-def veclen(vec: vec3):
+def veclen(vec: vec3) -> float:
     return sqrt(vec[0]**2 + vec[1]**2 + vec[2]**2)
+
+def setveclen(vec: vec3, new_len: float):
+    return vec * new_len / veclen(vec)
 
 def closest_point_on_obb(obb, vec):
     # get the local coordinates of b
@@ -37,6 +40,18 @@ def closest_point_on_obb(obb, vec):
     # transform back to world coordinates
     return dot(obb.orientation, closest_local) + obb.center
   
+def angle_to_mat3(theta):
+    return mat3(cos(theta), -sin(theta), 0,  sin(theta), cos(theta), 0, 0, 0, 0)
+
+def Vec3_to_vec3(_Vec3: Vec3) -> vec3:
+    return vec3(_Vec3.x, _Vec3.y, _Vec3.z)
+
+def rotation_to_euler(theta: mat3) -> Rotator:
+  return Rotator(
+    atan2(theta[2, 0], norm(vec2(theta[0, 0], theta[1, 0]))),
+    atan2(theta[1, 0], theta[0, 0]),
+    atan2(-theta[2, 1], theta[2, 2])
+  )
 
 class MyBot(BaseAgent):
     def __init__(self, name, team, index):
@@ -48,42 +63,60 @@ class MyBot(BaseAgent):
         self.pre_hit = HitData()
         self.ball_predictions = []
         self.not_hit_yet = True
-        
-        # Initialize simulation game model
-        Game.set_mode('soccar')
-        self.game = Game(index, team)
+        self.game = None
 
     def initialize_agent(self):
-        self.reset_gamestate()
         print('> Alphabot: I N I T I A L I Z E D')
 
     def reset_gamestate(self):
-        self.initial_ball_location = Vector3(0, 0, 100)
-        self.initial_car_location = Vector3(3000, -3000, 0)
-        self.training_target_location = Vec3(1000, 3000, 0)
+        print('> reset_gamestate()')
+
+        # Initialize inputs
+        self.initial_ball_location = Vector3(randint(-3000, 3000), randint(-3000, 3000), 100)
+        self.training_target_location = Vec3(randint(-3000, 3000), randint(-3000, 3000), 0)
+        self.initial_car_location = Vector3(0, 0, 0) # gonna calculate...
         self.not_hit_yet = True
         self.ball_predictions = []
 
-        # line car up with ball to avoid error from turning
-        ang = (Vec3(self.initial_ball_location) - Vec3(self.initial_car_location)).ang_to(Vec3(1,0,0))
+        # vector from target to ball
+        t = Vec3_to_vec3(self.training_target_location)
+        b = Ball(self.game.ball)
+        b.velocity = vec3(0,0,0)
+        b.location = Vec3_to_vec3(self.initial_ball_location)
+        c = Car(self.game.cars[self.index])
+
+        # Line car up touching the ball
+        translation_vector = vec3(b.location[0] - t[0], b.location[1] - t[1], 0)
+        translation_vector = setveclen(translation_vector, b.collision_radius + c.hitbox().half_width[0])
+        c.location = vec3(b.location[0], b.location[1], 0) + translation_vector
+        real_location = vec3(b.location[0], b.location[1], 0) + translation_vector * 3
+        self.initial_car_location = Vector3(real_location[0], real_location[1], real_location[2])
+
+        # Point car at ball
+        c.rotation = look_at(vec3(b.location[0] - c.location[0], b.location[1] - c.location[1], 0), vec3(0, 0, 1))
+        rotator = rotation_to_euler(c.rotation)
+
+        # Choose velocities...
+        c.velocity = setveclen(vec3(b.location[0] - c.location[0], b.location[1] - c.location[1], 0), 1410) # Full speed, no boost, towards ball
+
+        # Collide with ball
+        c.location += c.velocity * (1.0 / 120.0)
+
+        # Record predicted path
+        self.ball_predictions = []
+        for i in range(360):
+            b.step(1.0 / 120.0, c)
+            self.ball_predictions.append(vec3(b.location))
 
         # Set gamestate
         car_state = CarState(boost_amount=100, 
-                     physics=Physics(location=self.initial_car_location, velocity=Vector3(0, 0, 0), rotation=Rotator(0, ang, 0),
+                     physics=Physics(location=self.initial_car_location, velocity=Vector3(c.velocity[0], c.velocity[1], c.velocity[2]), rotation=rotator,
                      angular_velocity=Vector3(0, 0, 0)))
         ball_state = BallState(Physics(location=self.initial_ball_location, velocity=Vector3(0, 0, 0), rotation=Rotator(0, 0, 0), angular_velocity=Vector3(0, 0, 0)))
         game_state = GameState(ball=ball_state, cars={self.index: car_state})
         self.set_game_state(game_state)
-        return None
 
     def get_output(self, packet: GameTickPacket) -> SimpleControllerState:
-        # This is good to keep at the beginning of get_output. It will allow you to continue
-        # any sequences that you may have started during a previous call to get_output.
-        if self.active_sequence and not self.active_sequence.done:
-            controls = self.active_sequence.tick(packet)
-            if controls is not None:
-                return controls
-
         # Gather some information about our car and the ball
         my_car = packet.game_cars[self.index]
         car_location = Vec3(my_car.physics.location)
@@ -92,8 +125,26 @@ class MyBot(BaseAgent):
         ball_location = Vec3(packet.game_ball.physics.location)
         ball_velocity = Vec3(packet.game_ball.physics.velocity)
         ball_direction = ball_velocity.ang_to(Vec3(1, 0, 0)) if ball_velocity.length() > 0 else 0
+        self.car_rotation = my_car.physics.rotation
         reset = False
-        train = True
+
+        # Initialize simulation game model
+        if self.game == None:
+            Game.set_mode('soccar')
+            self.game = Game(self.index, self.team)
+            self.game.read_game_information(packet, self.get_rigid_body_tick(), self.get_field_info())
+            self.reset_gamestate()
+            return SimpleControllerState()
+
+        # Update simulation
+        self.game.read_game_information(packet, self.get_rigid_body_tick(), self.get_field_info())
+
+        # This is good to keep at the beginning of get_output. It will allow you to continue
+        # any sequences that you may have started during a previous call to get_output.
+        if self.active_sequence and not self.active_sequence.done:
+            controls = self.active_sequence.tick(packet)
+            if controls is not None:
+                return controls
 
         # Check for car hit ball
         if self.last_touch_location != packet.game_ball.latest_touch.hit_location:
@@ -101,67 +152,22 @@ class MyBot(BaseAgent):
             self.hit_data.append(self.pre_hit)
             self.iteration += 1
             self.last_touch_location = Vec3(packet.game_ball.latest_touch.hit_location)
-            print(f'> BALL HIT')
+            print(f'> Car hit ball')
             self.pre_hit = HitData()
             self.not_hit_yet = False
         else:
             self.pre_hit.car_direction_before = car_direction
 
-        # Update simulation
-        self.game.read_game_information(packet, self.get_rigid_body_tick(), self.get_field_info())
-
-        # Simulate the future hit
-        if self.not_hit_yet:
-            # make a copy of the ball's info that we can change
-            b = Ball(self.game.ball)
-            c = Car(self.game.cars[0])
-
-            # print(f'c.location before {c.location}')
-            # print(f'hitbox {c.hitbox()}')
-            # contact_point = closest_point_on_obb(c.hitbox(), b.location)
-            # # print(f'contact point {contact_point}')
-            translation_vector = vec3(b.location[0] - c.location[0], b.location[1] - c.location[1], 0)
-            # print(f'translation vector {translation_vector}')
-            length = veclen(translation_vector)
-            # print(f'veclen {length}')
-            newlen = length - b.collision_radius - c.hitbox().half_width[0]
-            # print(f'newlen {newlen}')
-            ratio = newlen / length
-            # print(f'ratio {ratio}')
-            translation_vector *= ratio
-            # print(f'translation_vector {translation_vector}')
-            c.location += translation_vector
-            # print(f'c.location after {c.location}')
-            c.location += c.velocity * (1.0 / 120.0)
-            # self.set_game_state(GameState(cars={self.index:CarState(physics=Physics(location=Vector3(c.location[0], c.location[1], c.location[2])))}))
-
-            self.ball_predictions = []
-            for i in range(360):
-
-                # simulate the forces acting on the ball for 1 frame
-                b.step(1.0 / 120.0, c)
-
-                # and add a copy of new ball position to the list of predictions
-                self.ball_predictions.append(vec3(b.location))
-
         # Reset if car passes ball
-        if car_location.y > ball_location.y:
-            reset = True
-            self.cur_tries = 999
-            print('> Scrapping bad data')
+        # if car_location.y > ball_location.y:
+        #     reset = True
+        #     self.cur_tries = 999
+        #     print('> Scrapping bad data')
 
         # Reset if ball passes target
-        if ball_location.y > self.training_target_location.y:
+        if abs(ball_location.x - self.training_target_location.x) < 100 and abs(ball_location.y - self.training_target_location.y) < 100:
             reset = True
-            if abs(ball_location.x - self.training_target_location.x) < 100 and abs(ball_location.y - self.training_target_location.y) < 100:
-                print('Task succesfully learned; picking new target')
-
-        # Skip first iteration
-        # if reset and self.iteration == 0:
-        #     train = False
-        #     self.iteration += 1
-        #     self.skip_train_ticks = 10
-        #     print('Skipping iteration')
+            print('> Ball hit target')
 
         # Rendering
         # self.renderer.begin_rendering()

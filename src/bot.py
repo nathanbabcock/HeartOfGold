@@ -89,18 +89,51 @@ class MyBot(BaseAgent):
         translation_vector = vec3(b.location[0] - t[0], b.location[1] - t[1], 0)
         translation_vector = setveclen(translation_vector, b.collision_radius + c.hitbox().half_width[0])
         c.location = vec3(b.location[0], b.location[1], 0) + translation_vector
-        real_location = vec3(b.location[0], b.location[1], 0) + translation_vector * 3
+        start_location = vec3(c.location)
+        real_location = vec3(b.location[0], b.location[1], 0) + translation_vector * 2
         self.initial_car_location = Vector3(real_location[0], real_location[1], real_location[2])
 
         # Point car at ball
         c.rotation = look_at(vec3(b.location[0] - c.location[0], b.location[1] - c.location[1], 0), vec3(0, 0, 1))
         rotator = rotation_to_euler(c.rotation)
 
-        # Choose velocities...
-        c.velocity = setveclen(vec3(b.location[0] - c.location[0], b.location[1] - c.location[1], 0), 1410) # Full speed, no boost, towards ball
+        last_error = 100 # arbitrary
+        car_speed = 1410
+        trials = 0
+        while abs(last_error) > 10:
+            # Check if we are stuck
+            trials += 1
+            if trials > 1000:
+                print('Warning; trials exceeded!')
+                break
 
-        # Collide with ball
-        c.location += c.velocity * (1.0 / 120.0)
+            # Reset ball and car position/velocity
+            b.location = Vec3_to_vec3(self.initial_ball_location)
+            b.velocity = vec3(0,0,0)
+            c.location = vec3(start_location)
+
+            # Adjust in the direction of the error
+            if last_error > 0:
+                car_speed += 10
+            elif last_error < 0:
+                car_speed -= 10
+
+            # Choose velocities...
+            c.velocity = setveclen(vec3(b.location[0] - c.location[0], b.location[1] - c.location[1], 0), car_speed) # Full speed, no boost, towards ball
+
+            # Collide with ball
+            c.location += c.velocity * (1.0 / 120.0)
+            b.step(1.0 / 120.0, c)
+
+            # Calculate target v_z to hit ball
+            delta_x = veclen(t - b.location)
+            g = -650.0
+            v_z = sqrt((g * delta_x) / -2.0)
+            last_error = v_z - b.velocity[2]
+            # print('current initial v_z:', b.velocity[2])
+            # print('target initial v_z:', v_z)
+        print('Found optimal car speed =', car_speed)
+        print('Error =', last_error)
 
         # Record predicted path
         self.ball_predictions = []

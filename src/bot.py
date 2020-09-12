@@ -53,6 +53,9 @@ def rotation_to_euler(theta: mat3) -> Rotator:
     atan2(-theta[2, 1], theta[2, 2])
   )
 
+def project(u: vec3, v: vec3) -> vec3:
+    return (dot(u, v) / norm(v)**2) * v
+
 class MyBot(BaseAgent):
     def __init__(self, name, team, index):
         super().__init__(name, team, index)
@@ -128,10 +131,15 @@ class MyBot(BaseAgent):
             # Calculate target v_z to hit ball
             delta_x = veclen(t - b.location)
             g = -650.0
-            v_z = sqrt((g * delta_x) / -2.0)
+            # v_xy = dot(b.velocity, t - Vec3_to_vec3(self.initial_ball_location))
+            v_xy = veclen(project(b.velocity, Vec3_to_vec3(self.initial_ball_location)))
+            v_z = (delta_x * g) / (-2.0 * v_xy)
             last_error = v_z - b.velocity[2]
+            # print('v_xy', v_xy)
+            # print('v_z', v_z)
             # print('current initial v_z:', b.velocity[2])
             # print('target initial v_z:', v_z)
+        self.initial_car_velocity = car_speed
         print('Found optimal car speed =', car_speed)
         print('Error =', last_error)
 
@@ -139,6 +147,7 @@ class MyBot(BaseAgent):
         self.ball_predictions = []
         for i in range(360):
             b.step(1.0 / 120.0, c)
+            # print('b.velocity.z', b.velocity[2])
             self.ball_predictions.append(vec3(b.location))
 
         # Set gamestate
@@ -198,7 +207,7 @@ class MyBot(BaseAgent):
         #     print('> Scrapping bad data')
 
         # Reset if ball passes target
-        if abs(ball_location.x - self.training_target_location.x) < 100 and abs(ball_location.y - self.training_target_location.y) < 100:
+        if abs(ball_location.x - self.training_target_location.x) < 40 and abs(ball_location.y - self.training_target_location.y) < 40:
             reset = True
             print('> Ball hit target')
 
@@ -220,6 +229,11 @@ class MyBot(BaseAgent):
             return controls
         controls.steer = steer_toward_target(my_car, ball_location)
         controls.throttle = 1.0
+        if car_velocity.length() > 1410 and car_velocity.length() < self.initial_car_velocity:
+            controls.boost = True
+        elif car_velocity.length() < 1410 and car_velocity.length() > self.initial_car_velocity:
+            controls.throttle = 0.0
+            
         # controls.boost = True
         return controls
 

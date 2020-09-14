@@ -56,6 +56,14 @@ def rotation_to_euler(theta: mat3) -> Rotator:
 def project(u: vec3, v: vec3) -> vec3:
     return (dot(u, v) / norm(v)**2) * v
 
+def get_closest_point_on_trajectory(b: Ball, target: vec3):
+    closest = vec3(target)
+    while True:
+        b.step(1.0 / 120.0)
+        if abs(veclen(target - b.location)) > abs(veclen(target - closest)):
+            return closest
+        closest = vec3(b.location)
+
 class MyBot(BaseAgent):
     def __init__(self, name, team, index):
         super().__init__(name, team, index)
@@ -80,6 +88,7 @@ class MyBot(BaseAgent):
         self.initial_car_location = Vector3(0, 0, 0) # gonna calculate...
         self.not_hit_yet = True
         self.ball_predictions = []
+        self.last_dist = None
 
         # vector from target to ball
         t = Vec3_to_vec3(self.training_target_location)
@@ -152,9 +161,12 @@ class MyBot(BaseAgent):
             self.pre_hit.car_direction_before = car_direction
 
         # Reset if ball hits target
-        if abs(ball_location.x - self.training_target_location.x) < 100 and abs(ball_location.y - self.training_target_location.y) < 100:
+        
+        cur_dist = ball_location.dist(self.training_target_location)
+        if self.last_dist != None and cur_dist > self.last_dist:
             reset = True
             print('> Ball hit target')
+        self.last_dist = cur_dist
 
         # Prepare simulation of future hit
         t = Vec3_to_vec3(self.training_target_location)
@@ -171,19 +183,33 @@ class MyBot(BaseAgent):
         b.step(1.0 / 120.0, c)
 
         # Calculate target v_z to hit ball
-        delta_x = veclen(t - b.location)
-        g = -650.0
-        v_xy = veclen(project(b.velocity, Vec3_to_vec3(self.initial_ball_location)))
-        if v_xy == 0:
-            v_xy = 0.00001 # hack it
-        v_z = (delta_x * g) / (-2.0 * v_xy)
-        last_error = v_z - b.velocity[2]
+        # delta_x = veclen(t - b.location)
+        # g = -650.0
+        # v_xy = veclen(project(b.velocity, Vec3_to_vec3(self.initial_ball_location)))
+        # if v_xy == 0:
+        #     v_xy = 0.00001 # hack it
+        # v_z = (delta_x * g) / (-2.0 * v_xy)
+        # last_error = v_z - b.velocity[2]
 
         # Record predicted path
         self.ball_predictions = []
+        first_bounce = None
         for i in range(360):
             b.step(1.0 / 120.0, c)
             self.ball_predictions.append(vec3(b.location))
+            if b.velocity[2] < 0 and first_bounce == None and b.location[2] <= 100:
+                first_bounce = vec3(b.location)
+
+        # distance_error = 
+        # horizontal_error =
+        # last_error = veclen(t - closest) 
+        ball_start = vec3(self.initial_ball_location.x, self.initial_ball_location.y, self.initial_ball_location.z)
+        if first_bounce == None or veclen(t - first_bounce) < 100:
+            last_error = 0
+        elif veclen(ball_start - first_bounce) > veclen(ball_start - t):
+            last_error = -10
+        else:
+            last_error = 10
 
         # Rendering
         if len(self.ball_predictions) > 2:
@@ -202,7 +228,7 @@ class MyBot(BaseAgent):
         controls.throttle = 1.0
         if car_velocity.length() > 1410 and last_error > 0:
             controls.boost = True
-        elif car_velocity.length() < 1410 and last_error < 0:
+        elif car_velocity.length() < 1411 and last_error < 0:
             controls.throttle = 0.0
             
         # controls.boost = True

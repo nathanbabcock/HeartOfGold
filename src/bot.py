@@ -13,7 +13,7 @@ from math import pi, sqrt, inf, cos, sin, tan, atan2
 from random import randint
 
 from rlutilities.simulation import Ball, Car, Field, Game, Input
-from rlutilities.linear_algebra import vec3, mat3, dot, angle_between, rotation, rotation_to_axis, axis_to_rotation, euler_to_rotation, norm, vec2, look_at
+from rlutilities.linear_algebra import vec3, mat3, dot, angle_between, rotation, rotation_to_axis, axis_to_rotation, euler_to_rotation, norm, vec2, look_at, cross
 
 class HitData:
     def __init__(self, car_direction_before=None, ball_direction_after=None, car_speed_before=None, ball_speed_before=None):
@@ -89,6 +89,7 @@ class MyBot(BaseAgent):
         self.not_hit_yet = True
         self.ball_predictions = []
         self.last_dist = None
+        self.ball_impact_target = Vec3(self.initial_ball_location)
 
         # vector from target to ball
         t = Vec3_to_vec3(self.training_target_location)
@@ -101,6 +102,8 @@ class MyBot(BaseAgent):
         translation_vector = vec3(b.location[0] - t[0], b.location[1] - t[1], 0)
         translation_vector = setveclen(translation_vector, 2000)
         c.location = vec3(b.location[0], b.location[1], 0) + translation_vector
+        horizontal_axis = cross(t - b.location, vec3(0,0,1))
+        c.location += setveclen(horizontal_axis, randint(-500, 500))
         self.initial_car_location = Vector3(c.location[0], c.location[1], c.location[2])
 
         # Initial velocity
@@ -161,7 +164,6 @@ class MyBot(BaseAgent):
             self.pre_hit.car_direction_before = car_direction
 
         # Reset if ball hits target
-        
         cur_dist = ball_location.dist(self.training_target_location)
         if self.last_dist != None and cur_dist > self.last_dist:
             reset = True
@@ -172,24 +174,20 @@ class MyBot(BaseAgent):
         t = Vec3_to_vec3(self.training_target_location)
         b = Ball(self.game.ball)
         c = Car(self.game.cars[self.index])
+        impact_target = vec3(self.ball_impact_target.x, self.ball_impact_target.y, self.ball_impact_target.z)
 
         # Move car to touch the ball
-        translation_vector = vec3(b.location[0] - c.location[0], b.location[1] - c.location[1], 0)
+        translation_vector = vec3(impact_target[0] - c.location[0], impact_target[1] - c.location[1], 0)
         translation_vector = setveclen(translation_vector, veclen(translation_vector) - (c.hitbox().half_width[0] + b.collision_radius))
         c.location += translation_vector
+
+        # Rotate car and car velocity to point at target
+        # c.rotation = look_at(vec3(impact_target[0] - c.location[0], impact_target[1] - c.location[1], 0), vec3(0, 0, 1))
+        # c.velocity = setveclen(impact_target - c.location, veclen(c.velocity))
 
         # Collide with ball
         c.location += c.velocity * (1.0 / 120.0)
         b.step(1.0 / 120.0, c)
-
-        # Calculate target v_z to hit ball
-        # delta_x = veclen(t - b.location)
-        # g = -650.0
-        # v_xy = veclen(project(b.velocity, Vec3_to_vec3(self.initial_ball_location)))
-        # if v_xy == 0:
-        #     v_xy = 0.00001 # hack it
-        # v_z = (delta_x * g) / (-2.0 * v_xy)
-        # last_error = v_z - b.velocity[2]
 
         # Record predicted path
         self.ball_predictions = []
@@ -200,22 +198,36 @@ class MyBot(BaseAgent):
             if b.velocity[2] < 0 and first_bounce == None and b.location[2] <= 100:
                 first_bounce = vec3(b.location)
 
-        # distance_error = 
-        # horizontal_error =
-        # last_error = veclen(t - closest) 
+        # Measure error
         ball_start = vec3(self.initial_ball_location.x, self.initial_ball_location.y, self.initial_ball_location.z)
-        if first_bounce == None or veclen(t - first_bounce) < 100:
-            last_error = 0
-        elif veclen(ball_start - first_bounce) > veclen(ball_start - t):
-            last_error = -10
-        else:
-            last_error = 10
+        if first_bounce == None:
+            first_bounce = ball_start
+        horizontal_axis = cross(t - ball_start, vec3(0,0,1))
+        distance_error = veclen(t - ball_start) - veclen(project(first_bounce - ball_start, t - ball_start))
+        horizontal_error_vector = project(first_bounce - ball_start, horizontal_axis)
+        horizontal_error = veclen(horizontal_error_vector)
+        horizontal_error_angle = angle_between(horizontal_error_vector, horizontal_axis)
+        if not (abs(horizontal_error_angle) < 0.01):
+            horizontal_error *= -1
+
+        # Adjust ball target to minimize horizontal error
+        ball_loc = vec3(ball_location.x, ball_location.y, ball_location.z)
+        h_step = 1
+        if horizontal_error > -50 and veclen(impact_target + setveclen(horizontal_axis, h_step) - ball_loc) < 100:
+            impact_target += setveclen(horizontal_axis, h_step)
+        elif horizontal_error < 50 and veclen(impact_target - setveclen(horizontal_axis, h_step) - ball_loc) < 100:
+            impact_target -= setveclen(horizontal_axis, h_step)
+
+        # ball_loc = vec3(ball_location.x, ball_location.y, ball_location.z)
+        # if impact_target - ball_loc
+        self.ball_impact_target = Vec3(impact_target[0], impact_target[1], impact_target[2])
 
         # Rendering
         if len(self.ball_predictions) > 2:
             self.renderer.draw_polyline_3d(self.ball_predictions, self.renderer.red())
         self.renderer.draw_rect_3d(self.training_target_location, 8, 8, True, self.renderer.green(), centered=True)
-        self.renderer.draw_line_3d(car_location, ball_location, self.renderer.white())
+        # self.renderer.draw_rect_3d(self.ball_impact_target, 8, 8, True, self.renderer.green(), centered=True)
+        self.renderer.draw_line_3d(car_location, self.ball_impact_target, self.renderer.white())
         self.renderer.draw_line_3d(ball_location, self.training_target_location, self.renderer.green())
         self.renderer.draw_string_2d(20, 20, 2, 2, f'Iteration: {self.iteration}', self.renderer.black())
 
@@ -224,11 +236,12 @@ class MyBot(BaseAgent):
         if reset:
             self.reset_gamestate()
             return controls
-        controls.steer = steer_toward_target(my_car, ball_location)
+
+        controls.steer = steer_toward_target(my_car, self.ball_impact_target)
         controls.throttle = 1.0
-        if car_velocity.length() > 1410 and last_error > 0:
+        if car_velocity.length() > 1411 and distance_error > 0:
             controls.boost = True
-        elif car_velocity.length() < 1411 and last_error < 0:
+        elif car_velocity.length() < 1410 and distance_error < 0:
             controls.throttle = 0.0
             
         # controls.boost = True

@@ -13,6 +13,7 @@ from math import pi, sqrt, inf, cos, sin, tan, atan2
 from random import randint
 
 from rlutilities.simulation import Ball, Car, Field, Game, Input
+from rlutilities.mechanics import Aerial
 from rlutilities.linear_algebra import *
 from util.rlutilities import *
 
@@ -23,6 +24,7 @@ class MyBot(BaseAgent):
         self.ball_predictions = []
         self.not_hit_yet = True
         self.game = None
+        self.aerial = None
 
     def initialize_agent(self):
         print('> Alphabot: I N I T I A L I Z E D')
@@ -32,15 +34,14 @@ class MyBot(BaseAgent):
 
         # Initialize inputs
         self.initial_ball_location = Vector3(0, 0, 100)
-        self.initial_ball_velocity = Vector3(0, 0, -650 * 4)
-        self.training_target_location = Vec3(randint(-3000, 3000), randint(-3000, 3000), randint(0, 3000))
+        self.initial_ball_velocity = Vector3(0, 0, 650 * 2)
         self.initial_car_location = Vector3(randint(-3000, 3000), randint(-3000, 3000), 0)
+        self.initial_car_velocity = Vector3(0, 0, 0)
+        self.training_target_location = Vec3(randint(-3000, 3000), randint(-3000, 3000), randint(0, 3000))
         self.not_hit_yet = True
         self.ball_predictions = []
         self.last_dist = None
         self.last_touch_location = Vec3(0, 0, 0)
-
-        # vector from target to ball
         t = to_vec3(self.training_target_location)
         b = Ball(self.game.ball)
         c = Car(self.game.cars[self.index])
@@ -52,11 +53,34 @@ class MyBot(BaseAgent):
         c.rotation = look_at(vec3(b.location[0] - c.location[0], b.location[1] - c.location[1], 0), vec3(0, 0, 1))
         rotator = rotation_to_euler(c.rotation)
 
+        # Helpful push in the right direction
+        # c.velocity = setveclen(c.forward(), 1000)
+        # self.initial_car_velocity = to_Vector3(c.velocity)
+
+        # Initialize aerial
+        self.aerial = Aerial(c)
+        for i in range(1200):
+            b.step(1.0 / 120.0)
+            if b.location[2] <= 500:
+                continue
+            self.aerial.target = b.location
+            self.aerial.arrival_time = b.time
+
+            # check if we can reach it by an aerial
+            simulation = self.aerial.simulate()
+            if norm(simulation.location - self.aerial.target) < 100:
+                b.step(0.016666)
+                b.step(0.016666)
+                self.aerial.target = b.location
+                self.aerial.arrival_time = b.time
+                # self.target_ball = Ball(prediction)
+                break
+
         # Set gamestate
         car_state = CarState(boost_amount=100, 
-                     physics=Physics(location=self.initial_car_location, velocity=to_Vector3(c.velocity), rotation=rotator,
+                     physics=Physics(location=self.initial_car_location, velocity=self.initial_car_velocity, rotation=rotator,
                      angular_velocity=Vector3(0, 0, 0)))
-        ball_state = BallState(Physics(location=self.initial_ball_location, velocity=to_Vector3(b.velocity), rotation=Rotator(0, 0, 0), angular_velocity=Vector3(0, 0, 0)))
+        ball_state = BallState(Physics(location=self.initial_ball_location, velocity=self.initial_ball_velocity, rotation=Rotator(0, 0, 0), angular_velocity=Vector3(0, 0, 0)))
         game_state = GameState(ball=ball_state, cars={self.index: car_state})
         self.set_game_state(game_state)
 
@@ -90,7 +114,7 @@ class MyBot(BaseAgent):
 
         # Reset if ball is no longer heading towards target (either from a miss or after a hit)
         cur_dist = ball_location.dist(self.training_target_location)
-        if self.last_dist != None and cur_dist > self.last_dist and False:
+        if ball_location.z < 500 and ball_velocity.z < 0:
             reset = True
         self.last_dist = cur_dist
 
@@ -102,29 +126,23 @@ class MyBot(BaseAgent):
         # Rendering
         if len(self.ball_predictions) > 2:
             self.renderer.draw_polyline_3d(self.ball_predictions, self.renderer.red())
+        if self.aerial and self.aerial.target:
+            self.renderer.draw_rect_3d(self.aerial.target, 8, 8, True, self.renderer.green(), centered=True)
+            self.renderer.draw_line_3d(car_location, self.aerial.target, self.renderer.white())
         self.renderer.draw_rect_3d(self.training_target_location, 8, 8, True, self.renderer.green(), centered=True)
-        self.renderer.draw_line_3d(car_location, ball_location, self.renderer.white())
-        self.renderer.draw_line_3d(ball_location, self.training_target_location, self.renderer.green())
+        # self.renderer.draw_line_3d(car_location, ball_location, self.renderer.white())
+        # self.renderer.draw_line_3d(ball_location, self.training_target_location, self.renderer.green())
 
         # Controller state
-        controls = SimpleControllerState()
         if reset:
             self.reset_gamestate()
-            return controls
+            return SimpleControllerState()
         
-        # controls.throttle = 0
-        # controls.boost = False
+        # Just do an aerial :4head:
+        if self.aerial is not None:
+            print('target', self.aerial.arrival_time)
+            self.aerial.step(self.game.time_delta)
+            # self.aerial.step(1.0 / 120.0)
+            return self.aerial.controls
 
-        # controls.steer = steer_toward_target(my_car, self.ball_impact_target)
-        # controls.throttle = .8
-        # if distance_error > 2000:
-        #     controls.boost = True
-        # elif distance_error < -2000 and veclen(first_bounce - ball_start) > 200:
-        #     controls.throttle = -1.0
-        # elif car_velocity.length() > 1410 and distance_error > 200:
-        #     controls.boost = True
-        # elif distance_error < -200:
-        #     controls.throttle = 0.0
-        # controls.boost = True
-
-        return controls
+        return SimpleControllerState()

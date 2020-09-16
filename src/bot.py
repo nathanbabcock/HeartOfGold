@@ -25,6 +25,7 @@ class MyBot(BaseAgent):
         self.not_hit_yet = True
         self.game = None
         self.aerial = None
+        self.timer = 0.0
 
     def initialize_agent(self):
         print('> Alphabot: I N I T I A L I Z E D')
@@ -34,7 +35,7 @@ class MyBot(BaseAgent):
 
         # Initialize inputs
         self.initial_ball_location = Vector3(0, 0, 100)
-        self.initial_ball_velocity = Vector3(0, 0, 650 * 2)
+        self.initial_ball_velocity = Vector3(randint(0, 0), randint(0, 0), 650 * 2)
         self.initial_car_location = Vector3(randint(-3000, 3000), randint(-3000, 3000), 0)
         self.initial_car_velocity = Vector3(0, 0, 0)
         self.training_target_location = Vec3(randint(-3000, 3000), randint(-3000, 3000), randint(0, 3000))
@@ -48,17 +49,39 @@ class MyBot(BaseAgent):
         b.location = to_vec3(self.initial_ball_location)
         b.velocity = to_vec3(self.initial_ball_velocity)
         c.location = to_vec3(self.initial_car_location)
+        c.velocity = to_vec3(self.initial_car_velocity)
 
         # Point car at ball
         c.rotation = look_at(vec3(b.location[0] - c.location[0], b.location[1] - c.location[1], 0), vec3(0, 0, 1))
+        # c.rotation = look_at(vec3(randint(-3000, 3000), randint(-3000, 3000), 0), vec3(0, 0, 1))
         rotator = rotation_to_euler(c.rotation)
 
         # Helpful push in the right direction
         # c.velocity = setveclen(c.forward(), 1000)
         # self.initial_car_velocity = to_Vector3(c.velocity)
 
+        # Wait
+        self.aerial = None
+        self.timer = 0.0
+
+        # Set gamestate
+        car_state = CarState(boost_amount=100, 
+                     physics=Physics(location=self.initial_car_location, velocity=self.initial_car_velocity, rotation=rotator,
+                     angular_velocity=Vector3(0, 0, 0)))
+        ball_state = BallState(Physics(location=self.initial_ball_location, velocity=self.initial_ball_velocity, rotation=Rotator(0, 0, 0), angular_velocity=Vector3(0, 0, 0)))
+        game_state = GameState(ball=ball_state, cars={self.index: car_state})
+        self.set_game_state(game_state)
+
+    def init_aerial(self):
+        print('> init_aerial()')
+
+        # Get values
+        t = to_vec3(self.training_target_location)
+        b = Ball(self.game.ball)
+        c = Car(self.game.cars[self.index])
+
         # Initialize aerial
-        self.aerial = Aerial(c)
+        self.aerial = Aerial(self.game.cars[self.index])
         for i in range(1200):
             b.step(1.0 / 120.0)
             if b.location[2] <= 500:
@@ -69,20 +92,12 @@ class MyBot(BaseAgent):
             # check if we can reach it by an aerial
             simulation = self.aerial.simulate()
             if norm(simulation.location - self.aerial.target) < 100:
-                b.step(0.016666)
-                b.step(0.016666)
+                b.step(1.0 / 120.0)
+                b.step(1.0 / 120.0)
                 self.aerial.target = b.location
                 self.aerial.arrival_time = b.time
                 # self.target_ball = Ball(prediction)
                 break
-
-        # Set gamestate
-        car_state = CarState(boost_amount=100, 
-                     physics=Physics(location=self.initial_car_location, velocity=self.initial_car_velocity, rotation=rotator,
-                     angular_velocity=Vector3(0, 0, 0)))
-        ball_state = BallState(Physics(location=self.initial_ball_location, velocity=self.initial_ball_velocity, rotation=Rotator(0, 0, 0), angular_velocity=Vector3(0, 0, 0)))
-        game_state = GameState(ball=ball_state, cars={self.index: car_state})
-        self.set_game_state(game_state)
 
     def get_output(self, packet: GameTickPacket) -> SimpleControllerState:
         # Gather some information about our car and the ball
@@ -118,6 +133,11 @@ class MyBot(BaseAgent):
             reset = True
         self.last_dist = cur_dist
 
+        # Wait
+        self.timer += self.game.time_delta
+        if self.timer >= 0.5 and self.aerial == None:
+            self.init_aerial()
+
         # Prepare simulation of future hit
         t = to_vec3(self.training_target_location)
         b = Ball(self.game.ball)
@@ -126,7 +146,7 @@ class MyBot(BaseAgent):
         # Rendering
         if len(self.ball_predictions) > 2:
             self.renderer.draw_polyline_3d(self.ball_predictions, self.renderer.red())
-        if self.aerial and self.aerial.target:
+        if self.aerial != None and self.aerial.target:
             self.renderer.draw_rect_3d(self.aerial.target, 8, 8, True, self.renderer.green(), centered=True)
             self.renderer.draw_line_3d(car_location, self.aerial.target, self.renderer.white())
         self.renderer.draw_rect_3d(self.training_target_location, 8, 8, True, self.renderer.green(), centered=True)
@@ -139,8 +159,8 @@ class MyBot(BaseAgent):
             return SimpleControllerState()
         
         # Just do an aerial :4head:
-        if self.aerial is not None:
-            print('target', self.aerial.arrival_time)
+        if self.aerial != None:
+            # print('target', self.aerial.target)
             self.aerial.step(self.game.time_delta)
             # self.aerial.step(1.0 / 120.0)
             return self.aerial.controls

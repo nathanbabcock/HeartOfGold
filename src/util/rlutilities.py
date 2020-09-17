@@ -3,6 +3,7 @@ from rlbot.utils.game_state_util import Vector3, Rotator
 from util.vec import Vec3
 
 from rlutilities.simulation import Ball, Car, Field, Game, Input
+from rlutilities.mechanics import Aerial
 from rlutilities.linear_algebra import *
 
 # A bunch of helper functions for working with the rlutilities package
@@ -55,3 +56,14 @@ def get_closest_point_on_trajectory(b: Ball, target: vec3):
         if abs(veclen(target - b.location)) > abs(veclen(target - closest)):
             return closest
         closest = vec3(b.location)
+
+def copy_aerial(aerial: Aerial, car: Car):
+    aerial_copy = Aerial(car)
+    aerial_copy.target = vec3(aerial.target)
+    aerial_copy.arrival_time = aerial.arrival_time
+    aerial_copy.target_orientation = aerial.target_orientation
+    aerial_copy.up = aerial.up
+    aerial_copy.angle_threshold = aerial.angle_threshold
+    aerial_copy.reorient_distance = aerial.reorient_distance
+    aerial_copy.throttle_distance = aerial.throttle_distance
+    return aerial_copy

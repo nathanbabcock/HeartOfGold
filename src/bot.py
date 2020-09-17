@@ -93,14 +93,7 @@ class MyBot(BaseAgent):
             dt = 1.0 / 60.0
             car_copy = Car(self.game.cars[self.index])
             ball_copy = Ball(self.game.ball)
-            aerial_copy = Aerial(car_copy)
-            aerial_copy.target = vec3(self.aerial.target)
-            aerial_copy.arrival_time = self.aerial.arrival_time
-            aerial_copy.target_orientation = self.aerial.target_orientation
-            aerial_copy.up = self.aerial.up
-            aerial_copy.angle_threshold = self.aerial.angle_threshold
-            aerial_copy.reorient_distance = self.aerial.reorient_distance
-            aerial_copy.throttle_distance = self.aerial.throttle_distance
+            aerial_copy = copy_aerial(self.aerial, car_copy)
 
             # same as aerial.simulate()
             for i in range(60*5):
@@ -169,10 +162,19 @@ class MyBot(BaseAgent):
         if self.timer >= 0.5 and self.aerial == None:
             self.init_aerial()
 
-        # Prepare simulation of future hit
+        # Re-simulate the aerial every frame
         t = to_vec3(self.training_target_location)
         b = Ball(self.game.ball)
         c = Car(self.game.cars[self.index])
+        dt = 1.0 / 60.0
+        if self.aerial is not None:
+            self.ball_predictions = [vec3(b.location)]
+            aerial_copy = copy_aerial(self.aerial, c)
+            for i in range(60*5):
+                aerial_copy.step(dt)
+                c.step(aerial_copy.controls, dt)
+                b.step(dt, c)
+                self.ball_predictions.append(vec3(b.location))
 
         # Rendering
         if len(self.ball_predictions) > 2:
@@ -191,9 +193,7 @@ class MyBot(BaseAgent):
         
         # Just do an aerial :4head:
         if self.aerial != None:
-            # print('target', self.aerial.target)
             self.aerial.step(self.game.time_delta)
-            # self.aerial.step(1.0 / 120.0)
             return self.aerial.controls
 
         return SimpleControllerState()

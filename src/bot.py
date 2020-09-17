@@ -82,22 +82,53 @@ class MyBot(BaseAgent):
 
         # Initialize aerial
         self.aerial = Aerial(self.game.cars[self.index])
-        for i in range(1200):
-            b.step(1.0 / 120.0)
+        for i in range(60*5):
+            b.step(1.0 / 60.0)
             if b.location[2] <= 500:
                 continue
             self.aerial.target = b.location
             self.aerial.arrival_time = b.time
 
-            # check if we can reach it by an aerial
-            simulation = self.aerial.simulate()
-            if norm(simulation.location - self.aerial.target) < 100:
-                b.step(1.0 / 120.0)
-                b.step(1.0 / 120.0)
-                self.aerial.target = b.location
-                self.aerial.arrival_time = b.time
-                # self.target_ball = Ball(prediction)
+            # Simulate an aerial
+            dt = 1.0 / 60.0
+            car_copy = Car(self.game.cars[self.index])
+            ball_copy = Ball(self.game.ball)
+            aerial_copy = Aerial(car_copy)
+            aerial_copy.target = vec3(self.aerial.target)
+            aerial_copy.arrival_time = self.aerial.arrival_time
+            aerial_copy.target_orientation = self.aerial.target_orientation
+            aerial_copy.up = self.aerial.up
+            aerial_copy.angle_threshold = self.aerial.angle_threshold
+            aerial_copy.reorient_distance = self.aerial.reorient_distance
+            aerial_copy.throttle_distance = self.aerial.throttle_distance
+
+            # same as aerial.simulate()
+            for i in range(60*5):
+                aerial_copy.step(dt)
+                car_copy.step(aerial_copy.controls, dt)
+                ball_copy.step(dt, car_copy)
+
+                if aerial_copy.finished:
+                    break
+
+            # Now we've simulated the aerial until completion
+            if norm(car_copy.location - self.aerial.target) < 100:
+                self.ball_predictions = [vec3(ball_copy.location)]
+                for i in range(60*5):
+                    car_copy.step(aerial_copy.controls, dt)
+                    ball_copy.step(dt, car_copy)
+                    self.ball_predictions.append(vec3(ball_copy.location))
                 break
+
+            # check if we can reach it by an aerial
+            # simulation = self.aerial.simulate()
+            # if norm(simulation.location - self.aerial.target) < 100:
+            #     self.aerial.target = b.location
+            #     self.aerial.arrival_time = b.time
+            #     break
+
+        print('aerial target', self.aerial.target)
+        print('aerial TIME', self.aerial.arrival_time)
 
     def get_output(self, packet: GameTickPacket) -> SimpleControllerState:
         # Gather some information about our car and the ball

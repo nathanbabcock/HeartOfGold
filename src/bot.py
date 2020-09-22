@@ -39,7 +39,8 @@ class MyBot(BaseAgent):
         self.initial_ball_velocity = Vector3(0, 0, 650 * 2)
         # self.initial_ball_velocity = Vector3(randint(-500, 500), randint(-500, 500), 650 * 2)
         # self.initial_car_location = Vector3(randint(-3000, 3000), randint(1000, 2000), 0)
-        self.initial_car_location = Vector3(1500, 1500, 0)
+        # self.initial_car_location = Vector3(1500, 1500, 0)
+        self.initial_car_location = Vector3(randint(-2000, 2000), 1000, 0)
         self.initial_car_velocity = Vector3(0, 0, 0)
         self.training_target_location = Vec3(0, -4000, 1000)
         self.not_hit_yet = True
@@ -109,14 +110,15 @@ class MyBot(BaseAgent):
 
             # Now we've simulated the aerial until completion
             if norm(car_copy.location - self.aerial.target) < 100:
-                self.ball_predictions = [vec3(ball_copy.location)]
-                for i in range(60*5):
-                    car_copy.step(aerial_copy.controls, dt)
-                    ball_copy.step(dt, car_copy)
-                    self.ball_predictions.append(vec3(ball_copy.location))
+                # self.ball_predictions = [vec3(ball_copy.location)]
+                # for i in range(60*5):
+                #     car_copy.step(aerial_copy.controls, dt)
+                #     ball_copy.step(dt, car_copy)
+                #     self.ball_predictions.append(vec3(ball_copy.location))
                 break
 
         self.original_aerial_target = vec3(self.aerial.target)
+        self.avg_aerial_error = None
         print('aerial target', self.aerial.target)
         print('aerial TIME', self.aerial.arrival_time)
 
@@ -164,11 +166,13 @@ class MyBot(BaseAgent):
 
         # Re-simulate the aerial every frame
         closest_dist = None
+        closest_point = None
+        closest_vec = None
         t = to_vec3(self.training_target_location)
         b = Ball(self.game.ball)
         c = Car(self.game.cars[self.index])
         dt = 1.0 / 60.0
-        if self.aerial is not None:
+        if self.aerial is not None and not self.aerial.finished:
             # Simulate current aerial
             self.ball_predictions = [vec3(b.location)]
             aerial_copy = copy_aerial(self.aerial, c)
@@ -182,9 +186,18 @@ class MyBot(BaseAgent):
                 dist = norm(t - b.location)
                 if closest_dist == None or dist < closest_dist:
                     closest_dist = dist
+                    closest_point = vec3(b.location)
+                    closest_vec = b.location - t
 
                 # Record trajectory
                 self.ball_predictions.append(vec3(b.location))
+
+            if self.avg_aerial_error == None:
+                self.avg_aerial_error = closest_vec
+                self.cur_aerial_sims = 1
+            else:
+                self.avg_aerial_error = self.avg_aerial_error + (closest_vec - self.avg_aerial_error) / (self.cur_aerial_sims + 1)
+                self.cur_aerial_sims += 1
 
             avg_sim_time = 0
             num_sims = 0
@@ -198,10 +211,12 @@ class MyBot(BaseAgent):
                 b = Ball(self.game.ball)
                 c = Car(self.game.cars[self.index])
                 alt_closest_dist = None
+                alt_closest_point = None
+                alt_closest_vec = None
                 alt_ball_predictions = [vec3(b.location)]
                 alt_aerial_hit = False
                 aerial_copy = copy_aerial(self.aerial, c)
-                perturbator = vec3(randint(-int(b.collision_radius), int(b.collision_radius)), randint(-int(b.collision_radius), int(b.collision_radius)), randint(-int(b.collision_radius), int(b.collision_radius)))
+                perturbator = vec3(randint(-int(2 * b.collision_radius), int(2 * b.collision_radius)), randint(-int(2 * b.collision_radius), int(2 * b.collision_radius)), randint(-int(2 * b.collision_radius), int(2 * b.collision_radius)))
                 aerial_copy.target = self.original_aerial_target + perturbator
                 for i in range(60*5):
                     # Simulate
@@ -224,16 +239,23 @@ class MyBot(BaseAgent):
                     # Measure dist from target
                     dist = norm(t - b.location)
                     if alt_closest_dist == None or dist < alt_closest_dist:
-                        alt_closest_dist = dist
+                        # alt_closest_dist = dist
+                        alt_closest_point = vec3(b.location)
+                        # alt_closest_dist = norm((closest_point + alt_closest_point) / 2)
+                        alt_closest_vec = b.location - t
+                        # average this delta with the previous average
+                        # alt_closest_dist = norm(self.avg_aerial_error + (alt_closest_vec - self.avg_aerial_error) / (self.cur_aerial_sims + 1))
+                        alt_closest_dist = norm((self.avg_aerial_error + alt_closest_vec) / 2)
 
                     # Record trajectory
                     alt_ball_predictions.append(vec3(b.location))
 
                 # We found a better aerial!
-                if alt_aerial_hit and alt_closest_dist < closest_dist:
+                if alt_closest_dist < closest_dist:
                     self.ball_predictions = alt_ball_predictions
                     self.aerial.target = aerial_copy.target
-                    # print('~Alternate aerial was ACTUALLY BETTER!~')
+                    # closest_point = alt_closest_point
+                    closest_dist = alt_closest_dist
 
                 # Update tick time estimation
                 time_this_sim = time.time() - sim_start
@@ -250,6 +272,7 @@ class MyBot(BaseAgent):
         if self.aerial != None and self.aerial.target:
             self.renderer.draw_rect_3d(self.aerial.target, 8, 8, True, self.renderer.green(), centered=True)
             self.renderer.draw_line_3d(car_location, self.aerial.target, self.renderer.white())
+            self.renderer.draw_line_3d(self.training_target_location, to_vec3(self.training_target_location) + self.avg_aerial_error, self.renderer.cyan())
         self.renderer.draw_rect_3d(self.training_target_location, 8, 8, True, self.renderer.green(), centered=True)
         # self.renderer.draw_line_3d(car_location, ball_location, self.renderer.white())
         # self.renderer.draw_line_3d(ball_location, self.training_target_location, self.renderer.green())

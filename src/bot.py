@@ -11,6 +11,7 @@ from util.vec import Vec3
 
 from math import pi, sqrt, inf, cos, sin, tan, atan2
 from random import randint
+import time
 
 from rlutilities.simulation import Ball, Car, Field, Game, Input
 from rlutilities.mechanics import Aerial
@@ -35,10 +36,12 @@ class MyBot(BaseAgent):
 
         # Initialize inputs
         self.initial_ball_location = Vector3(0, 0, 100)
-        self.initial_ball_velocity = Vector3(randint(0, 0), randint(0, 0), 650 * 2)
-        self.initial_car_location = Vector3(randint(-3000, 3000), randint(-3000, 3000), 0)
+        self.initial_ball_velocity = Vector3(0, 0, 650 * 2)
+        # self.initial_ball_velocity = Vector3(randint(-500, 500), randint(-500, 500), 650 * 2)
+        # self.initial_car_location = Vector3(randint(-3000, 3000), randint(1000, 2000), 0)
+        self.initial_car_location = Vector3(1500, 1500, 0)
         self.initial_car_velocity = Vector3(0, 0, 0)
-        self.training_target_location = Vec3(randint(-3000, 3000), randint(-3000, 3000), randint(0, 3000))
+        self.training_target_location = Vec3(0, -4000, 1000)
         self.not_hit_yet = True
         self.ball_predictions = []
         self.last_dist = None
@@ -113,17 +116,14 @@ class MyBot(BaseAgent):
                     self.ball_predictions.append(vec3(ball_copy.location))
                 break
 
-            # check if we can reach it by an aerial
-            # simulation = self.aerial.simulate()
-            # if norm(simulation.location - self.aerial.target) < 100:
-            #     self.aerial.target = b.location
-            #     self.aerial.arrival_time = b.time
-            #     break
-
+        self.original_aerial_target = vec3(self.aerial.target)
         print('aerial target', self.aerial.target)
         print('aerial TIME', self.aerial.arrival_time)
 
     def get_output(self, packet: GameTickPacket) -> SimpleControllerState:
+        # Record start time
+        tick_start = time.time()
+
         # Gather some information about our car and the ball
         my_car = packet.game_cars[self.index]
         car_location = Vec3(my_car.physics.location)
@@ -163,18 +163,86 @@ class MyBot(BaseAgent):
             self.init_aerial()
 
         # Re-simulate the aerial every frame
+        closest_dist = None
         t = to_vec3(self.training_target_location)
         b = Ball(self.game.ball)
         c = Car(self.game.cars[self.index])
         dt = 1.0 / 60.0
         if self.aerial is not None:
+            # Simulate current aerial
             self.ball_predictions = [vec3(b.location)]
             aerial_copy = copy_aerial(self.aerial, c)
             for i in range(60*5):
+                # Simulate
                 aerial_copy.step(dt)
                 c.step(aerial_copy.controls, dt)
                 b.step(dt, c)
+
+                # Measure dist from target
+                dist = norm(t - b.location)
+                if closest_dist == None or dist < closest_dist:
+                    closest_dist = dist
+
+                # Record trajectory
                 self.ball_predictions.append(vec3(b.location))
+
+            avg_sim_time = 0
+            num_sims = 0
+            tick_deadline = tick_start + (1.0 / 120.0)
+            while time.time() + avg_sim_time < tick_deadline:
+                # Start timer
+                sim_start = time.time()
+
+                # Simulate ALTERNATE aerial
+                t = to_vec3(self.training_target_location)
+                b = Ball(self.game.ball)
+                c = Car(self.game.cars[self.index])
+                alt_closest_dist = None
+                alt_ball_predictions = [vec3(b.location)]
+                alt_aerial_hit = False
+                aerial_copy = copy_aerial(self.aerial, c)
+                perturbator = vec3(randint(-int(b.collision_radius), int(b.collision_radius)), randint(-int(b.collision_radius), int(b.collision_radius)), randint(-int(b.collision_radius), int(b.collision_radius)))
+                aerial_copy.target = self.original_aerial_target + perturbator
+                for i in range(60*5):
+                    # Simulate
+                    aerial_copy.step(dt)
+                    c.step(aerial_copy.controls, dt)
+                    b.step(dt, c)
+
+                    # Bail on hitting wall or ground
+                    if abs(b.location[0]) > 4096 - b.collision_radius:
+                        break
+                    if abs(b.location[1]) > 5120 - b.collision_radius:
+                        break
+                    if abs(b.location[2]) < b.collision_radius * 1.05:
+                        break
+
+                    # Check if we hit the ball yet
+                    if norm(b.location - c.location) < 200:
+                        alt_aerial_hit = True
+
+                    # Measure dist from target
+                    dist = norm(t - b.location)
+                    if alt_closest_dist == None or dist < alt_closest_dist:
+                        alt_closest_dist = dist
+
+                    # Record trajectory
+                    alt_ball_predictions.append(vec3(b.location))
+
+                # We found a better aerial!
+                if alt_aerial_hit and alt_closest_dist < closest_dist:
+                    self.ball_predictions = alt_ball_predictions
+                    self.aerial.target = aerial_copy.target
+                    # print('~Alternate aerial was ACTUALLY BETTER!~')
+
+                # Update tick time estimation
+                time_this_sim = time.time() - sim_start
+                avg_sim_time = avg_sim_time + (time_this_sim - avg_sim_time) / (num_sims + 1)
+                num_sims += 1
+        
+            # print('Alternate realities visited during this hundreth of a second:', num_sims)
+            # print('avg sim time:', avg_sim_time)
+            # print('tick time:', 1.0 / 120.0)
 
         # Rendering
         if len(self.ball_predictions) > 2:

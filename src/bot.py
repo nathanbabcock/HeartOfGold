@@ -11,6 +11,7 @@ from util.vec import Vec3
 
 from math import pi, sqrt, inf, cos, sin, tan, atan2
 from random import randint
+import random
 import time
 
 from rlutilities.simulation import Ball, Car, Field, Game, Input
@@ -35,14 +36,14 @@ class MyBot(BaseAgent):
         print('> reset_gamestate()')
 
         # Initialize inputs
-        self.initial_ball_location = Vector3(0, 0, 100)
-        self.initial_ball_velocity = Vector3(0, 0, 650 * 2)
+        self.initial_ball_location = Vector3(0, 2000, 100)
+        self.initial_ball_velocity = Vector3(randint(-250, 250), randint(-250, 250), 650 * 2)
         # self.initial_ball_velocity = Vector3(randint(-500, 500), randint(-500, 500), 650 * 2)
         # self.initial_car_location = Vector3(randint(-3000, 3000), randint(1000, 2000), 0)
         # self.initial_car_location = Vector3(1500, 1500, 0)
-        self.initial_car_location = Vector3(randint(-2000, 2000), 1000, 0)
+        self.initial_car_location = Vector3(randint(-2000, 2000), 0, 0)
         self.initial_car_velocity = Vector3(0, 0, 0)
-        self.training_target_location = Vec3(0, -4000, 1000)
+        self.training_target_location = Vec3(0, 4000, 1000)
         self.not_hit_yet = True
         self.ball_predictions = []
         self.last_dist = None
@@ -66,6 +67,7 @@ class MyBot(BaseAgent):
 
         # Wait
         self.aerial = None
+        self.rotation_input = None
         self.timer = 0.0
 
         # Set gamestate
@@ -178,7 +180,7 @@ class MyBot(BaseAgent):
             aerial_copy = copy_aerial(self.aerial, c)
             for i in range(60*5):
                 # Simulate
-                aerial_copy.step(dt)
+                aerial_step(aerial_copy, c, self.rotation_input, dt)
                 c.step(aerial_copy.controls, dt)
                 b.step(dt, c)
 
@@ -216,11 +218,22 @@ class MyBot(BaseAgent):
                 alt_ball_predictions = [vec3(b.location)]
                 alt_aerial_hit = False
                 aerial_copy = copy_aerial(self.aerial, c)
+
+                rotation_input = None
+                if aerial_copy.arrival_time - c.time < 0.5:
+                    rotatobator = Input()
+                    rotatobator.pitch = random.uniform(-1.0, 1.0)
+                    rotatobator.yaw = random.uniform(-1.0, 1.0)
+                    rotatobator.roll = random.uniform(-1.0, 1.0)
+                    # rotatobator.boost = True
+                    rotation_input = rotatobator
+                # else:
                 perturbator = vec3(randint(-int(2 * b.collision_radius), int(2 * b.collision_radius)), randint(-int(2 * b.collision_radius), int(2 * b.collision_radius)), randint(-int(2 * b.collision_radius), int(2 * b.collision_radius)))
                 aerial_copy.target = self.original_aerial_target + perturbator
+                
                 for i in range(60*5):
                     # Simulate
-                    aerial_copy.step(dt)
+                    aerial_step(aerial_copy, c, rotation_input, dt)
                     c.step(aerial_copy.controls, dt)
                     b.step(dt, c)
 
@@ -254,6 +267,7 @@ class MyBot(BaseAgent):
                 if alt_closest_dist < closest_dist:
                     self.ball_predictions = alt_ball_predictions
                     self.aerial.target = aerial_copy.target
+                    self.rotation_input = rotation_input
                     # closest_point = alt_closest_point
                     closest_dist = alt_closest_dist
 
@@ -284,7 +298,10 @@ class MyBot(BaseAgent):
         
         # Just do an aerial :4head:
         if self.aerial != None:
-            self.aerial.step(self.game.time_delta)
+            aerial_step(self.aerial, Car(self.game.my_car), self.rotation_input, self.game.time_delta)
+            # self.aerial.step(self.game.time_delta)
+            # if self.aerial.controls.pitch == 0.0 and self.aerial.controls.yaw == 0.0:
+            # self.aerial.controls.roll = 0.2
             return self.aerial.controls
 
         return SimpleControllerState()

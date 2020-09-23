@@ -67,3 +67,12 @@ def copy_aerial(aerial: Aerial, car: Car):
     aerial_copy.reorient_distance = aerial.reorient_distance
     aerial_copy.throttle_distance = aerial.throttle_distance
     return aerial_copy
+
+def aerial_step(aerial: Aerial, car: Car, rotation_input = None, dt = 1.0 / 60.0):
+    return_value = aerial.step(dt)
+    if rotation_input is not None and aerial.arrival_time - car.time <= 0.5:
+        aerial.controls.pitch = rotation_input.pitch
+        aerial.controls.yaw = rotation_input.yaw
+        aerial.controls.roll = rotation_input.roll
+        # aerial.controls.boost = rotation_input.boost
+    return return_value

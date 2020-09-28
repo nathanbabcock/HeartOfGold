@@ -105,48 +105,54 @@ def simulate_alternate_aerials(self):
         aerial_copy = copy_aerial(self.aerial, c)
 
         rotation_input = None
-        if aerial_copy.arrival_time - c.time < 0.5:
-            rotatobator = Input()
-            rotatobator.pitch = random.uniform(-1.0, 1.0)
-            rotatobator.yaw = random.uniform(-1.0, 1.0)
-            rotatobator.roll = random.uniform(-1.0, 1.0)
-            # rotatobator.boost = True
-            rotation_input = rotatobator
+        # if aerial_copy.arrival_time - c.time < 0.5:
+        #     rotatobator = Input()
+        #     rotatobator.pitch = random.uniform(-1.0, 1.0)
+        #     rotatobator.yaw = random.uniform(-1.0, 1.0)
+        #     rotatobator.roll = random.uniform(-1.0, 1.0)
+        #     # rotatobator.boost = True
+        #     rotation_input = rotatobator
         # else:
         perturbator = vec3(randint(-int(2 * b.collision_radius), int(2 * b.collision_radius)), randint(-int(2 * b.collision_radius), int(2 * b.collision_radius)), randint(-int(2 * b.collision_radius), int(2 * b.collision_radius)))
         aerial_copy.target = self.original_aerial_target + perturbator
         
-        for i in range(60*5):
-            # Simulate
-            aerial_step(aerial_copy, c, rotation_input, dt)
-            c.step(aerial_copy.controls, dt)
-            b.step(dt, c)
+        # for i in range(60*5):
+        #     # Simulate
+        #     aerial_step(aerial_copy, c, rotation_input, dt)
+        #     c.step(aerial_copy.controls, dt)
+        #     b.step(dt, c)
 
-            # Bail on hitting wall or ground
-            if abs(b.location[0]) > 4096 - b.collision_radius:
-                break
-            if abs(b.location[1]) > 5120 - b.collision_radius:
-                break
-            if abs(b.location[2]) < b.collision_radius * 1.05:
-                break
+        #     # Bail on hitting wall or ground
+        #     if abs(b.location[0]) > 4096 - b.collision_radius:
+        #         break
+        #     if abs(b.location[1]) > 5120 - b.collision_radius:
+        #         break
+        #     if abs(b.location[2]) < b.collision_radius * 1.05:
+        #         break
 
-            # Check if we hit the ball yet
-            if norm(b.location - c.location) < 200:
-                alt_aerial_hit = True
+        #     # Check if we hit the ball yet
+        #     if norm(b.location - c.location) < 200:
+        #         alt_aerial_hit = True
 
-            # Measure dist from target
-            dist = norm(t - b.location)
-            if alt_closest_dist == None or dist < alt_closest_dist:
-                # alt_closest_dist = dist
-                alt_closest_point = vec3(b.location)
-                # alt_closest_dist = norm((self.closest_point + alt_closest_point) / 2)
-                alt_closest_vec = b.location - t
-                # average this delta with the previous average
-                # alt_closest_dist = norm(self.avg_aerial_error + (alt_closest_vec - self.avg_aerial_error) / (self.cur_aerial_sims + 1))
-                alt_closest_dist = norm((self.avg_aerial_error + alt_closest_vec) / 2)
+        #     # Measure dist from target
+        #     dist = norm(t - b.location)
+        #     if alt_closest_dist == None or dist < alt_closest_dist:
+        #         # alt_closest_dist = dist
+        #         alt_closest_point = vec3(b.location)
+        #         # alt_closest_dist = norm((self.closest_point + alt_closest_point) / 2)
+        #         alt_closest_vec = b.location - t
+        #         # average this delta with the previous average
+        #         # alt_closest_dist = norm(self.avg_aerial_error + (alt_closest_vec - self.avg_aerial_error) / (self.cur_aerial_sims + 1))
+        #         alt_closest_dist = norm((self.avg_aerial_error + alt_closest_vec) / 2)
 
-            # Record trajectory
-            alt_ball_predictions.append(vec3(b.location))
+        #     # Record trajectory
+        #     alt_ball_predictions.append(vec3(b.location))
+
+        # Simulate (using C++!)
+        alt_closest_vec = aerial_copy.simulate_advanced(c, b, t)
+        alt_closest_dist = norm(alt_closest_vec)
+
+        # print('this time the distance was', alt_closest_dist, 'versus the current value of', self.closest_dist)
 
         # We found a better aerial!
         if alt_closest_dist < self.closest_dist:
@@ -161,6 +167,6 @@ def simulate_alternate_aerials(self):
         avg_sim_time = avg_sim_time + (time_this_sim - avg_sim_time) / (num_sims + 1)
         num_sims += 1
 
-    # print('Alternate realities visited during this hundreth of a second:', num_sims)
+    print('Alternate realities visited during this hundreth of a second:', num_sims)
     # print('avg sim time:', avg_sim_time)
     # print('tick time:', 1.0 / 120.0)

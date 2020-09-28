@@ -14,9 +14,9 @@ from random import randint
 import random
 import time
 
-from rlutilities.simulation import Ball, Car, Field, Game, Input
-from rlutilities.mechanics import Aerial
-from rlutilities.linear_algebra import *
+from rlutilities.python.rlutilities.simulation import Ball, Car, Field, Game, Input
+from rlutilities.python.rlutilities.mechanics import Aerial
+from rlutilities.python.rlutilities.linear_algebra import *
 from util.rlutilities import *
 from mechanics.aerial import *
 

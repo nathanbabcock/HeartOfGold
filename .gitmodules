@@ -1,0 +1,4 @@
+[submodule "src/rlutilities"]
+	path = src/rlutilities
+	url = https://github.com/samuelpmish/RLUtilities.git
+	branch = master

@@ -1,6 +1,6 @@
-from rlutilities.python.rlutilities.simulation import Car, Ball
+from rlutilities.simulation import Car, Ball
 from rlutilities.mechanics import Dodge
-from rlutilities.python.rlutilities.linear_algebra import *
+from rlutilities.linear_algebra import *
 from util.rlutilities import *
 
 from random import uniform

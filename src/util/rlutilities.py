@@ -2,9 +2,9 @@ from math import pi, sqrt, inf, cos, sin, tan, atan2
 from rlbot.utils.game_state_util import Vector3, Rotator
 from util.vec import Vec3
 
-from rlutilities.python.rlutilities.simulation import Ball, Car, Field, Game, Input
-from rlutilities.python.rlutilities.mechanics import Aerial, Dodge
-from rlutilities.python.rlutilities.linear_algebra import *
+from rlutilities.simulation import Ball, Car, Field, Game, Input
+from rlutilities.mechanics import Aerial, Dodge
+from rlutilities.linear_algebra import *
 
 # A bunch of helper functions for working with the rlutilities package
 

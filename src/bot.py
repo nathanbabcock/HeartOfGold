@@ -14,11 +14,12 @@ from random import randint
 import random
 import time
 
-from rlutilities.python.rlutilities.simulation import Ball, Car, Field, Game, Input
-from rlutilities.python.rlutilities.mechanics import Aerial
-from rlutilities.python.rlutilities.linear_algebra import *
+from rlutilities.simulation import Ball, Car, Field, Game, Input
+from rlutilities.mechanics import Aerial
+from rlutilities.linear_algebra import *
 from util.rlutilities import *
 from mechanics.aerial import *
+from mechanics.path import *
 
 class MyBot(BaseAgent):
     def __init__(self, name, team, index):
@@ -29,14 +30,12 @@ class MyBot(BaseAgent):
         self.game = None
         self.aerial = None
         self.timer = 0.0
+        self.action = None
 
     def initialize_agent(self):
         print('> Alphabot: I N I T I A L I Z E D')
 
-    def reset_gamestate(self):
-        print('> reset_gamestate()')
-
-        # Initialize inputs
+    def reset_for_aerial(self):
         self.initial_ball_location = Vector3(0, 2000, 100)
         self.initial_ball_velocity = Vector3(randint(-250, 250), randint(-250, 250), 650 * 2)
         self.initial_car_location = Vector3(randint(-2000, 2000), 0, 0)
@@ -46,6 +45,23 @@ class MyBot(BaseAgent):
         self.ball_predictions = []
         self.last_dist = None
         self.last_touch_location = Vec3(0, 0, 0)
+
+    def reset_for_path_planning(self):
+        self.initial_ball_location = Vector3(0, 2000, 100)
+        self.initial_ball_velocity = Vector3(randint(-300, 300), randint(-300, 300), 0)
+        self.initial_car_location = Vector3(randint(-2000, 2000), 0, 0)
+        self.initial_car_velocity = Vector3(0, 0, 0)
+        self.training_target_location = Vec3(0, 4000, 1000)
+        self.not_hit_yet = True
+        self.ball_predictions = []
+        self.last_dist = None
+        self.last_touch_location = Vec3(0, 0, 0)
+
+    def reset_gamestate(self):
+        print('> reset_gamestate()')
+
+        # Initialize inputs
+        self.reset_for_path_planning()
         t = to_vec3(self.training_target_location)
         b = Ball(self.game.ball)
         c = Car(self.game.cars[self.index])
@@ -103,15 +119,15 @@ class MyBot(BaseAgent):
             self.not_hit_yet = False
 
         # Reset if ball is no longer heading towards target (either from a miss or after a hit)
-        cur_dist = ball_location.dist(self.training_target_location)
-        if ball_location.z < 500 and ball_velocity.z < 0:
-            reset = True
-        self.last_dist = cur_dist
+        # cur_dist = ball_location.dist(self.training_target_location)
+        # if ball_location.z < 500 and ball_velocity.z < 0:
+        #     reset = True
+        # self.last_dist = cur_dist
 
         # Wait
         self.timer += self.game.time_delta
-        if self.timer >= 0.5 and self.aerial == None:
-            init_aerial(self)
+        if self.timer >= 0.5 and (self.action == None or self.action.finished):
+            init_path(self)
 
         # Re-simulate the aerial every frame
         if self.aerial is not None and not self.aerial.finished:
@@ -125,16 +141,21 @@ class MyBot(BaseAgent):
             self.renderer.draw_rect_3d(self.aerial.target, 8, 8, True, self.renderer.green(), centered=True)
             self.renderer.draw_line_3d(car_location, self.aerial.target, self.renderer.white())
             self.renderer.draw_line_3d(self.training_target_location, to_vec3(self.training_target_location) + self.avg_aerial_error, self.renderer.cyan())
+        if self.curve != None:
+            self.renderer.draw_polyline_3d(self.curve.points, self.renderer.green())
         self.renderer.draw_rect_3d(self.training_target_location, 8, 8, True, self.renderer.green(), centered=True)
 
         # Controller state
         if reset:
             self.reset_gamestate()
             return SimpleControllerState()
-        
         # Just do an aerial :4head:
-        if self.aerial != None:
+        elif self.aerial != None:
             aerial_step(self.aerial, Car(self.game.my_car), self.rotation_input, self.game.time_delta)
             return self.aerial.controls
+        # Just hit the ball :4head:
+        elif self.action != None:
+            self.action.step(self.game.time_delta)
+            return self.action.controls
 
         return SimpleControllerState()

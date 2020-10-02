@@ -1,8 +1,8 @@
 # from rlutilities_v2.simulation import Ball, Car, Field, Game, Input
 # from rlutilities_v2.linear_algebra import vec3
 
-from rlutilities.python.rlutilities.simulation import Ball, Car, Field, Game, Input
-from rlutilities.python.rlutilities.linear_algebra import vec3
+from rlutilities.simulation import Ball, Car, Field, Game, Input
+from rlutilities.linear_algebra import vec3
 
 # from rlutilities.simulation import Ball, Car, Field, Game, Input
 # from rlutilities.linear_algebra import vec3

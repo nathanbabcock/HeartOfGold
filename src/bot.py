@@ -3,29 +3,28 @@ from rlbot.messages.flat.QuickChatSelection import QuickChatSelection
 from rlbot.utils.structures.game_data_struct import GameTickPacket
 from rlbot.utils.game_state_util import GameState, BallState, CarState, Physics, Vector3, Rotator, GameInfoState
 
+from math import pi, sqrt, inf, cos, sin, tan, atan2
+from random import randint
+import time
+import random
+random.seed(42)
+
 from util.ball_prediction_analysis import find_slice_at_time
 from util.boost_pad_tracker import BoostPadTracker
 from util.drive import steer_toward_target
 from util.sequence import Sequence, ControlStep
 from util.vec import Vec3
-
-from random import randint
-import random
-random.seed(42)
-
-from math import pi, sqrt, inf, cos, sin, tan, atan2
-import time
+from util.rlutilities import *
 
 from rlutilities.simulation import Ball, Car, Field, Game, Input
 from rlutilities.mechanics import Aerial
 from rlutilities.linear_algebra import *
-from util.rlutilities import *
+
 from mechanics.aerial import *
 from mechanics.path import *
+from mechanics.drive import *
 
-
-
-class MyBot(BaseAgent):
+class HeartOfGold(BaseAgent):
     def __init__(self, name, team, index):
         super().__init__(name, team, index)
         self.active_sequence: Sequence = None
@@ -97,7 +96,7 @@ class MyBot(BaseAgent):
         self.tick_start = time.time()
 
         # Gather some information about our car and the ball
-        my_car = packet.game_cars[self.index]
+        my_car: CarState = packet.game_cars[self.index]
         car_location = Vec3(my_car.physics.location)
         car_velocity = Vec3(my_car.physics.velocity)
         car_direction = car_velocity.ang_to(Vec3(1, 0, 0)) if car_velocity.length() > 0 else 0
@@ -161,10 +160,6 @@ class MyBot(BaseAgent):
             self.action.step(self.game.time_delta)
             return self.action.controls
         elif self.ground_target != None:
-            controls = SimpleControllerState()
-            controls.steer = steer_toward_target(my_car, self.ground_target)
-            controls.throttle = 1
-            controls.boost = True
-            return controls
+            return drive_at(self, my_car, self.ground_target)
 
         return SimpleControllerState()

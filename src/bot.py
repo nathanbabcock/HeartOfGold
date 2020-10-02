@@ -9,9 +9,11 @@ from util.drive import steer_toward_target
 from util.sequence import Sequence, ControlStep
 from util.vec import Vec3
 
-from math import pi, sqrt, inf, cos, sin, tan, atan2
 from random import randint
 import random
+random.seed(42)
+
+from math import pi, sqrt, inf, cos, sin, tan, atan2
 import time
 
 from rlutilities.simulation import Ball, Car, Field, Game, Input
@@ -20,6 +22,8 @@ from rlutilities.linear_algebra import *
 from util.rlutilities import *
 from mechanics.aerial import *
 from mechanics.path import *
+
+
 
 class MyBot(BaseAgent):
     def __init__(self, name, team, index):
@@ -31,6 +35,7 @@ class MyBot(BaseAgent):
         self.aerial = None
         self.timer = 0.0
         self.action = None
+        self.ground_target = None
 
     def initialize_agent(self):
         print('> Alphabot: I N I T I A L I Z E D')
@@ -119,15 +124,13 @@ class MyBot(BaseAgent):
             self.not_hit_yet = False
 
         # Reset if ball is no longer heading towards target (either from a miss or after a hit)
-        # cur_dist = ball_location.dist(self.training_target_location)
-        # if ball_location.z < 500 and ball_velocity.z < 0:
-        #     reset = True
-        # self.last_dist = cur_dist
+        if self.ground_target == None or car_location.dist(self.ground_target) < 200:
+            self.ground_target = Vec3(randint(-4000, 4000), randint(-5000, 5000), 0)
 
         # Wait
-        self.timer += self.game.time_delta
-        if self.timer >= 0.5 and (self.action == None or self.action.finished):
-            init_path(self)
+        # self.timer += self.game.time_delta
+        # if self.timer >= 0.5 and (self.action == None or self.action.finished):
+        #     init_path(self)
 
         # Re-simulate the aerial every frame
         if self.aerial is not None and not self.aerial.finished:
@@ -141,8 +144,8 @@ class MyBot(BaseAgent):
             self.renderer.draw_rect_3d(self.aerial.target, 8, 8, True, self.renderer.green(), centered=True)
             self.renderer.draw_line_3d(car_location, self.aerial.target, self.renderer.white())
             self.renderer.draw_line_3d(self.training_target_location, to_vec3(self.training_target_location) + self.avg_aerial_error, self.renderer.cyan())
-        if self.curve != None:
-            self.renderer.draw_polyline_3d(self.curve.points, self.renderer.green())
+        if self.ground_target != None:
+            self.renderer.draw_rect_3d(self.ground_target, 8, 8, True, self.renderer.green(), centered=True)
         self.renderer.draw_rect_3d(self.training_target_location, 8, 8, True, self.renderer.green(), centered=True)
 
         # Controller state
@@ -157,5 +160,11 @@ class MyBot(BaseAgent):
         elif self.action != None:
             self.action.step(self.game.time_delta)
             return self.action.controls
+        elif self.ground_target != None:
+            controls = SimpleControllerState()
+            controls.steer = steer_toward_target(my_car, self.ground_target)
+            controls.throttle = 1
+            controls.boost = True
+            return controls
 
         return SimpleControllerState()

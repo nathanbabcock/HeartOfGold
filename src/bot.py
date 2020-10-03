@@ -31,6 +31,7 @@ class HeartOfGold(BaseAgent):
     def __init__(self, name, team, index):
         super().__init__(name, team, index)
         self.throttle_analysis = ThrottleAnalysis()
+        self.boost_analysis = ThrottleAnalysis()
 
         self.active_sequence: Sequence = None
         self.ball_predictions = []
@@ -146,8 +147,8 @@ class HeartOfGold(BaseAgent):
         # Predict time to target
         ground_target = to_vec3(self.ground_target)
         if self.ground_target != None and self.time_estimate == None and angle_between(self.game.my_car.forward(), ground_target - self.game.my_car.location) < pi / 8:
-            self.time_estimate = self.game.time + self.throttle_analysis.travel_distance(norm(ground_target - self.game.my_car.location), norm(self.game.my_car.velocity)).time
-            self.speed_estimate = self.throttle_analysis.travel_distance(norm(ground_target - self.game.my_car.location), norm(self.game.my_car.velocity)).speed
+            self.time_estimate = self.game.time + self.boost_analysis.travel_distance(norm(ground_target - self.game.my_car.location), norm(self.game.my_car.velocity)).time
+            self.speed_estimate = self.boost_analysis.travel_distance(norm(ground_target - self.game.my_car.location), norm(self.game.my_car.velocity)).speed
 
         # Wait
         # self.timer += self.game.time_delta

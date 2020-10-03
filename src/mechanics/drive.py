@@ -18,8 +18,12 @@ def drive_at(self, car: CarState, target: Vec3):
         controls.boost = False
         controls.handbrake = True
     else:
-        controls.boost = False
+        controls.boost = True
         controls.handbrake = False
+
+    # Be smart about not using boost at max speed
+    # if Vec3(car.physics.velocity).length() > self.boost_analysis.frames[-1].speed - 10:
+    #     controls.boost = False
 
     controls.steer = steer_toward_target(car, target)
     controls.throttle = 1

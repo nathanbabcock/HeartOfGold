@@ -23,6 +23,7 @@ from rlutilities.linear_algebra import *
 from mechanics.aerial import *
 from mechanics.path import *
 from mechanics.drive import *
+from mechanics.intercept import *
 
 from analysis.throttle import *
 
@@ -130,16 +131,17 @@ class HeartOfGold(BaseAgent):
             self.not_hit_yet = False
 
         # Reset if ball is no longer heading towards target (either from a miss or after a hit)
-        if self.ground_target == None or car_location.dist(self.ground_target) < 100:
+        if self.ground_target != None and car_location.dist(self.ground_target) < 100:
             print('Expected time = ', self.time_estimate)
             print('Actual time = ', self.game.time)
             print('Expected speed = ', self.speed_estimate)
             print('Actual speed = ', norm(self.game.my_car.velocity))
-            self.ground_target = Vec3(randint(-4000, 4000), randint(-5000, 5000), 0)
             self.time_estimate = None
             self.speed_estimate = None
-            self.reset_gamestate()
-            return SimpleControllerState()
+
+        # Recalculate intercept every frame
+        intercept = ground_intercept(self)
+        self.ground_target = Vec3(intercept[0], intercept[1], intercept[2])
 
         # Predict time to target
         ground_target = to_vec3(self.ground_target)

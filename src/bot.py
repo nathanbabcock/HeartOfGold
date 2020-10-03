@@ -24,9 +24,13 @@ from mechanics.aerial import *
 from mechanics.path import *
 from mechanics.drive import *
 
+from analysis.throttle import *
+
 class HeartOfGold(BaseAgent):
     def __init__(self, name, team, index):
         super().__init__(name, team, index)
+        self.throttle_analysis = ThrottleAnalysis()
+
         self.active_sequence: Sequence = None
         self.ball_predictions = []
         self.not_hit_yet = True
@@ -35,6 +39,9 @@ class HeartOfGold(BaseAgent):
         self.timer = 0.0
         self.action = None
         self.ground_target = None
+
+        self.time_estimate = None
+        self.speed_estimate = None
 
     def initialize_agent(self):
         print('> Alphabot: I N I T I A L I Z E D')
@@ -123,8 +130,22 @@ class HeartOfGold(BaseAgent):
             self.not_hit_yet = False
 
         # Reset if ball is no longer heading towards target (either from a miss or after a hit)
-        if self.ground_target == None or car_location.dist(self.ground_target) < 200:
+        if self.ground_target == None or car_location.dist(self.ground_target) < 100:
+            print('Expected time = ', self.time_estimate)
+            print('Actual time = ', self.game.time)
+            print('Expected speed = ', self.speed_estimate)
+            print('Actual speed = ', norm(self.game.my_car.velocity))
             self.ground_target = Vec3(randint(-4000, 4000), randint(-5000, 5000), 0)
+            self.time_estimate = None
+            self.speed_estimate = None
+            self.reset_gamestate()
+            return SimpleControllerState()
+
+        # Predict time to target
+        ground_target = to_vec3(self.ground_target)
+        if self.ground_target != None and self.time_estimate == None and angle_between(self.game.my_car.forward(), ground_target - self.game.my_car.location) < pi / 8:
+            self.time_estimate = self.game.time + self.throttle_analysis.travel_distance(norm(ground_target - self.game.my_car.location), norm(self.game.my_car.velocity)).time
+            self.speed_estimate = self.throttle_analysis.travel_distance(norm(ground_target - self.game.my_car.location), norm(self.game.my_car.velocity)).speed
 
         # Wait
         # self.timer += self.game.time_delta

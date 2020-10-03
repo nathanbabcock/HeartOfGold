@@ -7,7 +7,7 @@ from math import pi, sqrt, inf, cos, sin, tan, atan2
 from random import randint
 import time
 import random
-random.seed(42)
+# random.seed(42)
 
 from util.ball_prediction_analysis import find_slice_at_time
 from util.boost_pad_tracker import BoostPadTracker
@@ -60,7 +60,7 @@ class HeartOfGold(BaseAgent):
 
     def reset_for_path_planning(self):
         self.initial_ball_location = Vector3(0, 2000, 100)
-        self.initial_ball_velocity = Vector3(randint(-300, 300), randint(-300, 300), 0)
+        self.initial_ball_velocity = Vector3(randint(-1000, 1000), randint(-1000, 1000), 0)
         self.initial_car_location = Vector3(randint(-2000, 2000), 0, 0)
         self.initial_car_velocity = Vector3(0, 0, 0)
         self.training_target_location = Vec3(0, 4000, 1000)

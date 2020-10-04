@@ -20,10 +20,11 @@ from rlutilities.simulation import Ball, Car, Field, Game, Input
 from rlutilities.mechanics import Aerial
 from rlutilities.linear_algebra import *
 
-from mechanics.aerial import *
-from mechanics.path import *
 from mechanics.drive import *
 from mechanics.intercept import *
+from mechanics.dodge import *
+from mechanics.aerial import *
+# from mechanics.path import *
 
 from analysis.throttle import *
 
@@ -37,6 +38,8 @@ class HeartOfGold(BaseAgent):
         self.ball_predictions = []
         self.not_hit_yet = True
         self.game = None
+        self.dodge = None
+        self.dodge_started = False
         self.aerial = None
         self.timer = 0.0
         self.action = None
@@ -160,6 +163,10 @@ class HeartOfGold(BaseAgent):
             simulate_aerial(self)
             simulate_alternate_aerials(self)
 
+        # Update dodge (init or clean up old)
+        # print('asdf')
+        try_init_dodge(self)
+
         # Rendering
         if len(self.ball_predictions) > 2:
             self.renderer.draw_polyline_3d(self.ball_predictions, self.renderer.red())
@@ -174,16 +181,16 @@ class HeartOfGold(BaseAgent):
         # Controller state
         if reset:
             self.reset_gamestate()
-            return SimpleControllerState()
+            return SimpleControllerState()\
+        # "Do a flip!"
+        elif self.dodge is not None:
+            return dodge_controls(self, my_car)
         # Just do an aerial :4head:
-        elif self.aerial != None:
+        elif self.aerial is not None:
             aerial_step(self.aerial, Car(self.game.my_car), self.rotation_input, self.game.time_delta)
             return self.aerial.controls
         # Just hit the ball :4head:
-        elif self.action != None:
-            self.action.step(self.game.time_delta)
-            return self.action.controls
-        elif self.ground_target != None:
+        elif self.ground_target is not None:
             return drive_at(self, my_car, self.ground_target)
 
         return SimpleControllerState()

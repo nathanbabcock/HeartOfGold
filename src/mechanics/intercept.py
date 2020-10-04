@@ -21,11 +21,11 @@ def ground_intercept(self) -> vec3:
     while i < max_tries:
         analysis = self.boost_analysis.travel_distance(norm(intercept - c.location), norm(c.velocity))
         ball_index = int(round(analysis.time * 60))
-        if ball_index > len(self.ball_predictions):
+        if ball_index >= len(self.ball_predictions):
             return self.ball_predictions[-1]
         ball_location = self.ball_predictions[ball_index]
-        if norm(ball_location - intercept) <= 100:
-            if i != 1: print(f'Intercept convergence in {i} iterations')
+        if norm(ball_location - intercept) <= b.collision_radius + c.hitbox().half_width[0]:
+            # if i != 1: print(f'Intercept convergence in {i} iterations')
             return ball_location
         intercept = ball_location
         i += 1

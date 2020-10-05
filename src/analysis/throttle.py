@@ -1,5 +1,6 @@
 import csv
 import os
+from util.singleton import Singleton
 
 class ThrottleFrame:
     def __init__(self, time: float, distance: float, speed: float):
@@ -10,7 +11,10 @@ class ThrottleFrame:
     def copy(self):
         return ThrottleFrame(self.time, self.distance, self.speed)
 
-class ThrottleAnalysis:
+
+@Singleton
+class ThrottleAnalysis():
+    # Read frames from csv
     def __init__(self):
         self.frames = []
         filename = 'data/throttle.csv'

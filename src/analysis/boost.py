@@ -2,7 +2,9 @@ import csv
 import os
 from analysis.throttle import ThrottleFrame
 
-class BoostAnalysis:
+# Read boost self.frames from CSV
+@Singleton
+class BoostAnalysis():
     def __init__(self):
         self.frames = []
         filename = 'data/boost.csv'
@@ -10,10 +12,10 @@ class BoostAnalysis:
             reader = csv.DictReader(csvfile)
             for row in reader:
                 self.frames.append(ThrottleFrame(row['time'], row['distance'], row['speed']))
-            print(f'Read {len(self.frames)} frames from {filename}')
+            print(f'Read {len(self.frames)} self.frames from {filename}')
 
     # TODO could be improved with a binary search or gradient descent
-    def get_frame_by_speed(self, speed: float) -> ThrottleFrame:
+    def get_frame_by_speed(speed: float) -> ThrottleFrame:
         closest = None
         for frame in self.frames:
             if closest == None or abs(frame.speed - speed) < abs(closest.speed - speed):
@@ -21,14 +23,14 @@ class BoostAnalysis:
         return closest.copy()
 
     # TODO obvious repitition with above, could probably be generalized later
-    def get_frame_by_distance(self, distance: float) -> ThrottleFrame:
+    def get_frame_by_distance(distance: float) -> ThrottleFrame:
         closest = None
         for frame in self.frames:
             if closest == None or abs(frame.distance - distance) < abs(closest.distance - distance):
                 closest = frame
         return closest.copy()
 
-    def travel_distance(self, distance: float, initial_speed: float = 0):
+    def travel_distance(distance: float, initial_speed: float = 0):
         start = self.get_frame_by_speed(initial_speed)
         end_dist = start.distance + distance
         end = self.get_frame_by_distance(end_dist)

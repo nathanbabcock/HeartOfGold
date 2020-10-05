@@ -9,12 +9,12 @@ from mechanics.drive import *
 from analysis.boost import *
 from analysis.throttle import *
 
-from random import uniform
+from random import randint
 from time import time
 
 def random_dodge(car: Car) -> Dodge: 
     dodge = Dodge(car)
-    dodge.trigger_distance = 500
+    dodge.trigger_distance = 600
     dodge.delay = 0.3
     dodge.duration = 0.15
     dodge.direction = vec2(car.forward())
@@ -33,16 +33,19 @@ def copy_dodge(dodge: Dodge, car: Car) -> Dodge:
     dodge_copy.preorientation = dodge.preorientation
     return dodge_copy
 
-def simulate_dodge(self, dodge: Dodge):
+def simulate_dodge(self, dodge: Dodge, ground_target = None):
+    if ground_target is None:
+        ground_target = self.ground_target
+
     # Sanity checks
-    assert self.ground_target is not None
+    assert ground_target is not None
     assert len(self.ball_predictions) > 0
     assert self.training_target_location is not None
 
     # Init vars
     c = Car(self.game.my_car)
     b = Ball(self.game.ball)
-    t = to_vec3(self.ground_target)
+    t = to_vec3(ground_target)
     dt = 1.0 / 60.0
     dodge_copy = copy_dodge(dodge, c)
     hit = False
@@ -57,7 +60,7 @@ def simulate_dodge(self, dodge: Dodge):
     c.velocity = direction * sim_start_state.speed
     c.location += translation
     c.time = sim_start_state.time
-    ball_index = int(round(sim_start_state.time * 60))
+    ball_index = min(int(round(sim_start_state.time * 60)), len(self.ball_predictions) - 1)
     b.location = vec3(self.ball_predictions[ball_index])
     b.time = sim_start_state.time
     self.ball_predictions = self.ball_predictions[:ball_index+1]
@@ -90,19 +93,44 @@ def simulate_dodge(self, dodge: Dodge):
         return None
     return min_error
 
+def simulate_alternate_dodges(self):
+    assert self.ground_target is not None
+
+    tick_deadline = self.tick_start + (1.0 / 120.0)
+    dodges_tried = 0
+    while time() < tick_deadline:
+        c = Car(self.game.my_car)
+        t = to_vec3(self.ground_target)
+        dodge = random_dodge(c)
+        perturbator = vec3(randint(-200, 200), randint(-200, 200), randint(-200, 200))
+        ground_target = t + perturbator
+        ground_target = Vec3(ground_target[0], ground_target[1], ground_target[2])
+
+        error = simulate_dodge(self, dodge, ground_target)
+        dodges_tried += 1
+
+        if error is not None and (self.dodge_error is None or norm(error) < norm(self.dodge_error)):
+            self.dodge = dodge
+            self.ground_target = Vec3(ground_target[0], ground_target[1], ground_target[2])
+            print('Found a better dodge!')
+
+    print(f'Tried {dodges_tried} dodges')
+
 def try_init_dodge(self):
     if self.dodge is not None and self.dodge.finished:
         self.dodge = None
     if self.dodge is not None and norm(to_vec3(self.ground_target) - self.game.my_car.location) < 100:
         self.dodge = None
     sim_dodge = None
+    dodge_error = None
     if self.dodge is None:
         sim_dodge = random_dodge(self.game.my_car)
         sim_dodge.direction = vec2(self.game.my_car.location - self.game.ball.location)
         dodge_error = simulate_dodge(self, sim_dodge)
-    if sim_dodge is not None:
+    if dodge_error is not None:
         self.dodge = sim_dodge
         self.dodge_started = False
+        self.dodge_error = dodge_error
 
 def dodge_controls(self, carState):
     # print('dodge_controls')

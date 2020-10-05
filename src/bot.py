@@ -31,19 +31,20 @@ from analysis.throttle import *
 class HeartOfGold(BaseAgent):
     def __init__(self, name, team, index):
         super().__init__(name, team, index)
-        self.throttle_analysis = ThrottleAnalysis()
-        self.boost_analysis = ThrottleAnalysis()
-
         self.active_sequence: Sequence = None
         self.ball_predictions = []
         self.not_hit_yet = True
         self.game = None
-        self.dodge = None
-        self.dodge_started = False
         self.aerial = None
         self.timer = 0.0
         self.action = None
-        self.ground_target = None
+
+        self.intercept = None
+
+        self.dodge = None
+        self.dodge_started = False
+        self.dodge_error = None
+        #self.ground_target = None
 
         self.time_estimate = None
         self.speed_estimate = None
@@ -134,29 +135,8 @@ class HeartOfGold(BaseAgent):
             print(f'> Car hit ball')
             self.not_hit_yet = False
 
-        # Reset if ball is no longer heading towards target (either from a miss or after a hit)
-        if self.ground_target != None and car_location.dist(self.ground_target) < 100:
-            print('Expected time = ', self.time_estimate)
-            print('Actual time = ', self.game.time)
-            print('Expected speed = ', self.speed_estimate)
-            print('Actual speed = ', norm(self.game.my_car.velocity))
-            self.time_estimate = None
-            self.speed_estimate = None
-
         # Recalculate intercept every frame
-        intercept = ground_intercept(self)
-        self.ground_target = Vec3(intercept[0], intercept[1], intercept[2])
-
-        # Predict time to target
-        ground_target = to_vec3(self.ground_target)
-        if self.ground_target != None and self.time_estimate == None and angle_between(self.game.my_car.forward(), ground_target - self.game.my_car.location) < pi / 8:
-            self.time_estimate = self.game.time + self.boost_analysis.travel_distance(norm(ground_target - self.game.my_car.location), norm(self.game.my_car.velocity)).time
-            self.speed_estimate = self.boost_analysis.travel_distance(norm(ground_target - self.game.my_car.location), norm(self.game.my_car.velocity)).speed
-
-        # Wait
-        # self.timer += self.game.time_delta
-        # if self.timer >= 0.5 and (self.action == None or self.action.finished):
-        #     init_path(self)
+        self.intercept = Intercept.calculate(self.game.my_car, self.game.ball)
 
         # Re-simulate the aerial every frame
         if self.aerial is not None and not self.aerial.finished:
@@ -164,8 +144,7 @@ class HeartOfGold(BaseAgent):
             simulate_alternate_aerials(self)
 
         # Update dodge (init or clean up old)
-        # print('asdf')
-        try_init_dodge(self)
+        # try_init_dodge(self)
 
         # Rendering
         if len(self.ball_predictions) > 2:
@@ -174,14 +153,14 @@ class HeartOfGold(BaseAgent):
             self.renderer.draw_rect_3d(self.aerial.target, 8, 8, True, self.renderer.green(), centered=True)
             self.renderer.draw_line_3d(car_location, self.aerial.target, self.renderer.white())
             self.renderer.draw_line_3d(self.training_target_location, to_vec3(self.training_target_location) + self.avg_aerial_error, self.renderer.cyan())
-        if self.ground_target != None:
-            self.renderer.draw_rect_3d(self.ground_target, 8, 8, True, self.renderer.green(), centered=True)
+        if self.intercept != None:
+            self.renderer.draw_rect_3d(self.intercept.location, 8, 8, True, self.renderer.green(), centered=True)
         self.renderer.draw_rect_3d(self.training_target_location, 8, 8, True, self.renderer.green(), centered=True)
 
         # Controller state
         if reset:
             self.reset_gamestate()
-            return SimpleControllerState()\
+            return SimpleControllerState()
         # "Do a flip!"
         elif self.dodge is not None:
             return dodge_controls(self, my_car)
@@ -190,7 +169,7 @@ class HeartOfGold(BaseAgent):
             aerial_step(self.aerial, Car(self.game.my_car), self.rotation_input, self.game.time_delta)
             return self.aerial.controls
         # Just hit the ball :4head:
-        elif self.ground_target is not None:
-            return drive_at(self, my_car, self.ground_target)
+        elif self.intercept is not None:
+            return self.intercept.get_controls(my_car, self.game.my_car) #drive_at(self, my_car, self.intercept.location)
 
         return SimpleControllerState()

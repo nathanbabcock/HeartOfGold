@@ -23,11 +23,11 @@ class Intercept():
         controls = SimpleControllerState()
         target_Vec3 = Vec3(self.location[0], self.location[1], self.location[2])
 
-        if angle_between(self.location - to_vec3(car_state.physics.location), car.forward()) > pi / 2:
+        if angle_between(self.location - to_vec3(car_state.physics.location), car.forward()) > pi / 4:
             controls.boost = False
             controls.handbrake = True
         else:
-            controls.boost = True
+            controls.boost = self.boost
             controls.handbrake = False
 
         # Be smart about not using boost at max speed
@@ -68,7 +68,7 @@ class Intercept():
                 break
             ball_location = ball_predictions[ball_index]
             if norm(ball_location - intercept.location) <= b.collision_radius + c.hitbox().half_width[0]:
-                if i != 1: print(f'Intercept convergence in {i} iterations')
+                # if i != 1: print(f'Intercept convergence in {i} iterations')
                 break
             intercept.location = ball_location
             intercept.time = ball_index / 60.0
@@ -76,5 +76,15 @@ class Intercept():
 
         if i >= max_tries:
             print(f'Warning: max tries ({max_tries}) exceeded for calculating intercept')
+
+        # Intercept is only meant for ground paths (and walls/cieling are only indirectly supported)
+        collision_radius = c.hitbox().half_width[2] * 2 + b.collision_radius
+        on_ground = intercept.location[2] <= collision_radius
+        on_back_wall = abs(intercept.location[1]) >= 5120 - collision_radius
+        on_side_wall = abs(intercept.location[0]) >= 4096 - collision_radius
+        # on_cieling = intercept.location[2] >= 2044 - collision_radius
+        reachable = on_ground or on_back_wall or on_side_wall # or on_cieling
+        if not reachable:
+            return None
 
         return intercept

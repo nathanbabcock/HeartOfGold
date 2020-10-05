@@ -33,8 +33,8 @@ def to_vec3(_Vec3: Vector3) -> vec3:
 def to_Vector3(_vec3: vec3):
     return Vector3(_vec3[0], _vec3[1], _vec3[2])
 
-# def to_Vec3(_vec3: vec3):
-#     return Vec3(_vec3[0], _vec3[1], _vec3[2])
+def vec3_to_Vec3(_vec3: vec3):
+    return Vec3(_vec3[0], _vec3[1], _vec3[2])
 
 def to_Vec3(_Vector3: Vector3):
     return Vec3(_Vector3.x, _Vector3.y, _Vector3.z)

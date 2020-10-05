@@ -40,6 +40,7 @@ class HeartOfGold(BaseAgent):
         self.action = None
 
         self.intercept = None
+        self.target = None
 
         self.dodge = None
         self.dodge_started = False
@@ -57,7 +58,6 @@ class HeartOfGold(BaseAgent):
         self.initial_ball_velocity = Vector3(randint(-250, 250), randint(-250, 250), 650 * 2)
         self.initial_car_location = Vector3(randint(-2000, 2000), 0, 0)
         self.initial_car_velocity = Vector3(0, 0, 0)
-        self.training_target_location = Vec3(0, 4000, 1000)
         self.not_hit_yet = True
         self.ball_predictions = []
         self.last_dist = None
@@ -68,7 +68,6 @@ class HeartOfGold(BaseAgent):
         self.initial_ball_velocity = Vector3(randint(-1000, 1000), randint(-1000, 1000), 0)
         self.initial_car_location = Vector3(randint(-2000, 2000), 0, 0)
         self.initial_car_velocity = Vector3(0, 0, 0)
-        self.training_target_location = Vec3(0, 4000, 1000)
         self.not_hit_yet = True
         self.ball_predictions = []
         self.last_dist = None
@@ -79,7 +78,7 @@ class HeartOfGold(BaseAgent):
 
         # Initialize inputs
         self.reset_for_path_planning()
-        t = to_vec3(self.training_target_location)
+        t = self.target
         b = Ball(self.game.ball)
         c = Car(self.game.cars[self.index])
         b.location = to_vec3(self.initial_ball_location)
@@ -104,6 +103,17 @@ class HeartOfGold(BaseAgent):
         game_state = GameState(ball=ball_state, cars={self.index: car_state})
         self.set_game_state(game_state)
 
+    def pick_intercept(self):
+        if norm(self.game.my_car.location - self.target) > norm(self.game.ball.location - self.target):
+            # Try to hit the ball
+            self.intercept = Intercept.calculate(self.game.my_car, self.game.ball)
+            if self.intercept is not None: return
+
+        # Otherwise, try to get in position
+        waypoint = normalize(self.game.ball.location - self.target) * 5 * norm(self.game.ball.velocity) + self.game.ball.location
+        self.intercept = Intercept(waypoint)
+        self.intercept.boost = False
+
     def get_output(self, packet: GameTickPacket) -> SimpleControllerState:
         # Record start time
         self.tick_start = time.time()
@@ -123,7 +133,9 @@ class HeartOfGold(BaseAgent):
             Game.set_mode('soccar')
             self.game = Game(self.index, self.team)
             self.game.read_game_information(packet, self.get_rigid_body_tick(), self.get_field_info())
+            self.target = vec3(0, 5120 if self.team is 0 else -5120, 642.775 / 2) # Opposing net
             self.reset_gamestate()
+            print('TEAM', self.team)
             return SimpleControllerState()
 
         # Update simulation
@@ -136,7 +148,7 @@ class HeartOfGold(BaseAgent):
             self.not_hit_yet = False
 
         # Recalculate intercept every frame
-        self.intercept = Intercept.calculate(self.game.my_car, self.game.ball)
+        self.pick_intercept()
 
         # Re-simulate the aerial every frame
         if self.aerial is not None and not self.aerial.finished:
@@ -152,10 +164,10 @@ class HeartOfGold(BaseAgent):
         if self.aerial != None and self.aerial.target:
             self.renderer.draw_rect_3d(self.aerial.target, 8, 8, True, self.renderer.green(), centered=True)
             self.renderer.draw_line_3d(car_location, self.aerial.target, self.renderer.white())
-            self.renderer.draw_line_3d(self.training_target_location, to_vec3(self.training_target_location) + self.avg_aerial_error, self.renderer.cyan())
+            self.renderer.draw_line_3d(vec3_to_Vec3(self.target), self.target + self.avg_aerial_error, self.renderer.cyan())
         if self.intercept != None:
             self.renderer.draw_rect_3d(self.intercept.location, 8, 8, True, self.renderer.green(), centered=True)
-        self.renderer.draw_rect_3d(self.training_target_location, 8, 8, True, self.renderer.green(), centered=True)
+        self.renderer.draw_rect_3d(vec3_to_Vec3(self.target), 8, 8, True, self.renderer.green(), centered=True)
 
         # Controller state
         if reset:

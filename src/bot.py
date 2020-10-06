@@ -104,6 +104,11 @@ class HeartOfGold(BaseAgent):
         self.set_game_state(game_state)
 
     def pick_intercept(self):
+        if self.intercept is not None and self.intercept.purpose == 'ball':
+            error = self.intercept.simulate(self)
+            if error is None: self.intercept = None
+            else: return
+
         if norm(self.game.my_car.location - self.target) > norm(self.game.ball.location - self.target):
             # Try to hit the ball
             self.intercept = Intercept.calculate(self.game.my_car, self.game.ball)
@@ -113,6 +118,7 @@ class HeartOfGold(BaseAgent):
         waypoint = normalize(self.game.ball.location - self.target) * 5 * norm(self.game.ball.velocity) + self.game.ball.location
         self.intercept = Intercept(waypoint)
         self.intercept.boost = False
+        self.intercept.purpose = 'position'
 
     def get_output(self, packet: GameTickPacket) -> SimpleControllerState:
         # Record start time

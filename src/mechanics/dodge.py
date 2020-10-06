@@ -80,6 +80,7 @@ def simulate_dodge(self, dodge: Dodge, ground_target = None):
         # Check if we hit the ball yet
         if norm(b.location - c.location) < (c.hitbox().half_width[0] + b.collision_radius) * 1.05:
             hit = True
+            print("HIT")
 
         # Measure dist from target
         error = t - b.location
@@ -89,8 +90,7 @@ def simulate_dodge(self, dodge: Dodge, ground_target = None):
         # Record trajectory
         self.ball_predictions.append(vec3(b.location))
 
-    if not hit:
-        return None
+    if not hit: return None
     return min_error
 
 def simulate_alternate_dodges(self):

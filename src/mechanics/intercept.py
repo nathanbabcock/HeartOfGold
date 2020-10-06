@@ -14,9 +14,58 @@ class Intercept():
         self.location = location
         self.boost = boost
         self.time = None
+        self.purpose = None # rip
 
-    def simulate(self, car: Car, ball: Ball = None) -> vec3:
-        return None
+    def simulate(self, bot) -> vec3:
+        # print('simulate intercept')
+
+        # Init vars
+        c = Car(bot.game.my_car)
+        b = Ball(bot.game.ball)
+        t = vec3(bot.target)
+        intercept = self.location
+        dt = 1.0 / 60.0
+        hit = False
+        min_error = None
+
+        # Drive towards intercept (moving in direction of c.forward())
+        c.rotation = look_at(intercept, c.up())
+        direction = normalize(intercept - c.location)#c.forward()
+        advance_distance = norm(intercept - c.location) - c.hitbox().half_width[0] - b.collision_radius
+        translation = direction * advance_distance
+        sim_start_state: ThrottleFrame = BoostAnalysis().travel_distance(advance_distance, norm(c.velocity))
+        c.velocity = direction * sim_start_state.speed
+        c.location += translation
+        c.time += sim_start_state.time
+        bot.ball_predictions = [vec3(b.location)]
+
+        while b.time < c.time:
+            b.step(dt)
+            bot.ball_predictions.append(vec3(b.location))
+
+        # print(c.time, b.time)
+        print(c.location, b.location)
+
+        # Simulate the collision and resulting
+        for i in range(60*3):
+            c.location += c.velocity * dt
+            b.step(dt, c)
+
+            # Check if we hit the ball yet
+            if norm(b.location - c.location) < (c.hitbox().half_width[0] + b.collision_radius) * 1.05:
+                hit = True
+                print('hit')
+
+            # Measure dist from target
+            error = t - b.location
+            if hit and (min_error == None or norm(error) < norm(min_error)):
+                min_error = error
+
+            # Record trajectory
+            bot.ball_predictions.append(vec3(b.location))
+
+        if not hit: return None
+        return min_error
 
     # warning: lazy conversions and variable scope
     def get_controls(self, car_state: CarState, car: Car):
@@ -55,6 +104,7 @@ class Intercept():
         # and then aiming at the ball's NEW position. Guaranteed to converge (typically in <10 iterations)
         # unless the ball is moving away from the car faster than the car's max boost speed
         intercept = Intercept(b.location)
+        intercept.purpose = 'ball'
         intercept.boost = True
         i = 0
         max_tries = 25

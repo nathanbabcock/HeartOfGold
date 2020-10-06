@@ -9,17 +9,18 @@ from mechanics.drive import *
 from analysis.boost import *
 from analysis.throttle import *
 
-from random import randint
+from random import randint, choice
 from time import time
 
-def random_dodge(car: Car) -> Dodge: 
+def random_dodge(car: Car, direction = None) -> Dodge:
     dodge = Dodge(car)
     # dodge.trigger_distance = 600
     dodge.delay = 0.3
+    # dodge.delay = uniform(0.3, 1.3)
     dodge.duration = 0.15
-    dodge.direction = vec2(car.forward())
+    dodge.direction = direction if direction is not None else car.forward()#choice(directions)#vec2(car.forward())
+
     # dodge.preorientation = dot(axis_to_rotation(vec3(0, 0, 3)), car.rotation)
-    # dodge.delay = uniform(0.0, 1.5)
     # dodge.preorientation = axis_to_rotation(vec3(uniform(-1.0, 1.0), uniform(-1.0, 1.0), uniform(-1.0, 1.0)))
     # dodge.direction = vec2(uniform(-1.0, 1.0), uniform(-1.0, 1.0))
     return dodge
@@ -57,7 +58,7 @@ def simulate_dodge(self, dodge: Dodge, target: vec3 = None):
         b.step(dt, c)
 
         # Check if we hit the ball yet
-        if norm(b.location - c.location) < c.hitbox().half_width[0] + b.collision_radius + (2300.0 / 30.0): # last term is 2 ticks of car displacement at full boost at 60hz
+        if norm(b.location - c.location) < c.hitbox().half_width[0] + b.collision_radius:
             hit = True
             print("DODGE HIT")
 
@@ -95,11 +96,40 @@ def simulate_alternate_dodges(self):
 
     print(f'Tried {dodges_tried} dodges')
 
-def get_dodge(self, car: Car):
-    dodge = random_dodge(car)
-    error = simulate_dodge(self, dodge)
-    if error is not None:
-        return dodge
+def get_dodge(self, car: Car, ball: Ball, target: vec3):
+    # Try every direction
+    directions = [
+        vec2(0.0, 0.0), # double jump (up)
+        vec2(car.forward()),
+        vec2(car.left()),
+        vec2(-1.0 * car.left()), # right
+        vec2(-1.0 * car.forward()), # back
+        vec2(car.forward() + car.left()), # forward left
+        vec2(car.forward() - car.left()), # forward right
+        vec2(-1.0 * car.forward() + car.left()), # back left
+        vec2(-1.0 * car.forward() - car.left()), # back right
+    ]
+
+    # Record the best result (min dist from target)
+    best_dodge = None
+    min_error = None
+    for direction in directions:
+        dodge = random_dodge(car, direction)
+        error = dodge.simulate_hit(car, ball, target)
+        # error = simulate_dodge(self, dodge)#dodge.simulate_hit(car, ball, target)#
+        # print(f'dodge error for {direction} is {error}')
+        # print(f'ball.loc - target is {target - self.game.ball.location}')
+
+        # Check if ball not hit
+        if norm(error) > 999999:
+            continue
+
+        # Set new best dodge
+        if min_error is None or norm(error) < norm(min_error):
+            min_error = error
+            best_dodge = dodge
+
+    return best_dodge
 
 def try_init_dodge(self):
     if self.dodge is not None and self.dodge.finished:

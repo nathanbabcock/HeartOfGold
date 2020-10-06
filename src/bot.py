@@ -111,7 +111,7 @@ class HeartOfGold(BaseAgent):
 
         # Try dodging whenever possible/whenever close to the ball
         if norm(self.game.my_car.location - self.game.ball.location) < norm(self.game.my_car.velocity):
-            self.dodge = get_dodge(self, self.game.my_car)#random_dodge(self.game.my_car)
+            self.dodge = get_dodge(self, self.game.my_car, self.game.ball, self.target)#random_dodge(self.game.my_car)
             if self.dodge is not None: return
 
         # Simulate current intercept

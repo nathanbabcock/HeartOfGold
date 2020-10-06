@@ -44,7 +44,7 @@ class Intercept():
             bot.ball_predictions.append(vec3(b.location))
 
         # print(c.time, b.time)
-        print(c.location, b.location)
+        # print(c.location, b.location)
 
         # Simulate the collision and resulting
         for i in range(60*3):
@@ -54,7 +54,7 @@ class Intercept():
             # Check if we hit the ball yet
             if norm(b.location - c.location) < (c.hitbox().half_width[0] + b.collision_radius) * 1.05:
                 hit = True
-                print('hit')
+                # print('hit')
 
             # Measure dist from target
             error = t - b.location
@@ -72,9 +72,12 @@ class Intercept():
         controls = SimpleControllerState()
         target_Vec3 = Vec3(self.location[0], self.location[1], self.location[2])
 
-        if angle_between(self.location - to_vec3(car_state.physics.location), car.forward()) > pi / 4:
+        if angle_between(self.location - to_vec3(car_state.physics.location), car.forward()) > pi / 2:
             controls.boost = False
             controls.handbrake = True
+        elif angle_between(self.location - to_vec3(car_state.physics.location), car.forward()) > pi / 4:
+            controls.boost = False
+            controls.handbrake = False
         else:
             controls.boost = self.boost
             controls.handbrake = False

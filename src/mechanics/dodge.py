@@ -14,7 +14,7 @@ from time import time
 
 def random_dodge(car: Car) -> Dodge: 
     dodge = Dodge(car)
-    dodge.trigger_distance = 600
+    # dodge.trigger_distance = 600
     dodge.delay = 0.3
     dodge.duration = 0.15
     dodge.direction = vec2(car.forward())
@@ -33,54 +33,33 @@ def copy_dodge(dodge: Dodge, car: Car) -> Dodge:
     dodge_copy.preorientation = dodge.preorientation
     return dodge_copy
 
-def simulate_dodge(self, dodge: Dodge, ground_target = None):
-    if ground_target is None:
-        ground_target = self.ground_target
+def simulate_dodge(self, dodge: Dodge, target: vec3 = None):
+    if target is None:
+        target = self.target
 
     # Sanity checks
-    assert ground_target is not None
-    assert len(self.ball_predictions) > 0
-    assert self.training_target_location is not None
+    assert target is not None
 
     # Init vars
     c = Car(self.game.my_car)
     b = Ball(self.game.ball)
-    t = to_vec3(ground_target)
+    t = vec3(target)
     dt = 1.0 / 60.0
     dodge_copy = copy_dodge(dodge, c)
     hit = False
     min_error = None
+    self.ball_predictions = [vec3(b.location)]
 
-    # 1. Drive towards ground target (moving in direction of c.forward())
-    c.rotation = look_at(t, c.up())
-    direction = c.forward()
-    advance_distance = norm(t - c.location) - dodge.trigger_distance
-    translation = direction * advance_distance
-    sim_start_state: ThrottleFrame = self.boost_analysis.travel_distance(advance_distance, norm(c.velocity))
-    c.velocity = direction * sim_start_state.speed
-    c.location += translation
-    c.time = sim_start_state.time
-    ball_index = min(int(round(sim_start_state.time * 60)), len(self.ball_predictions) - 1)
-    b.location = vec3(self.ball_predictions[ball_index])
-    b.time = sim_start_state.time
-    self.ball_predictions = self.ball_predictions[:ball_index+1]
-
-    # 2. Simulate dodge controls, car, car+ball collision
+    # Simulate dodge controls, car, car+ball collision
     for i in range(60*3):
-        # If not yet in range, naively advance at constant velocity
-        if norm(t - c.location) > dodge_copy.trigger_distance:
-            c.location += c.velocity * dt
-            c.time += dt
-            b.step(dt)
-        else:
-            dodge_copy.step(dt)
-            c.step(dodge_copy.controls, dt)
-            b.step(dt, c)
+        dodge_copy.step(dt)
+        c.step(dodge_copy.controls, dt)
+        b.step(dt, c)
 
         # Check if we hit the ball yet
-        if norm(b.location - c.location) < (c.hitbox().half_width[0] + b.collision_radius) * 1.05:
+        if norm(b.location - c.location) < c.hitbox().half_width[0] + b.collision_radius + (2300.0 / 30.0): # last term is 2 ticks of car displacement at full boost at 60hz
             hit = True
-            print("HIT")
+            print("DODGE HIT")
 
         # Measure dist from target
         error = t - b.location
@@ -115,6 +94,12 @@ def simulate_alternate_dodges(self):
             print('Found a better dodge!')
 
     print(f'Tried {dodges_tried} dodges')
+
+def get_dodge(self, car: Car):
+    dodge = random_dodge(car)
+    error = simulate_dodge(self, dodge)
+    if error is not None:
+        return dodge
 
 def try_init_dodge(self):
     if self.dodge is not None and self.dodge.finished:

@@ -103,14 +103,25 @@ class HeartOfGold(BaseAgent):
         game_state = GameState(ball=ball_state, cars={self.index: car_state})
         self.set_game_state(game_state)
 
-    def pick_intercept(self):
-        if self.intercept is not None and self.intercept.purpose == 'ball':
-            error = self.intercept.simulate(self)
-            if error is None: self.intercept = None
+    def plan(self):
+        # Clean up old dodge
+        if self.dodge is not None:
+            if self.dodge.finished: self.dodge = None
             else: return
 
+        # Try dodging whenever possible/whenever close to the ball
+        if norm(self.game.my_car.location - self.game.ball.location) < norm(self.game.my_car.velocity):
+            self.dodge = get_dodge(self, self.game.my_car)#random_dodge(self.game.my_car)
+            if self.dodge is not None: return
+
+        # Simulate current intercept
+        # if self.intercept is not None and self.intercept.purpose == 'ball':
+        #     error = self.intercept.simulate(self)
+        #     if error is None: self.intercept = None
+        #     else: return
+
+        # Calculate new intercept
         if norm(self.game.my_car.location - self.target) > norm(self.game.ball.location - self.target):
-            # Try to hit the ball
             self.intercept = Intercept.calculate(self.game.my_car, self.game.ball)
             if self.intercept is not None: return
 
@@ -154,7 +165,7 @@ class HeartOfGold(BaseAgent):
             self.not_hit_yet = False
 
         # Recalculate intercept every frame
-        self.pick_intercept()
+        self.plan()
 
         # Re-simulate the aerial every frame
         if self.aerial is not None and not self.aerial.finished:
@@ -181,7 +192,8 @@ class HeartOfGold(BaseAgent):
             return SimpleControllerState()
         # "Do a flip!"
         elif self.dodge is not None:
-            return dodge_controls(self, my_car)
+            self.dodge.step(self.game.time_delta)
+            return self.dodge.controls
         # Just do an aerial :4head:
         elif self.aerial is not None:
             aerial_step(self.aerial, Car(self.game.my_car), self.rotation_input, self.game.time_delta)

@@ -9,19 +9,19 @@ from mechanics.drive import *
 from analysis.boost import *
 from analysis.throttle import *
 
-from random import randint, choice
+from random import randint, uniform, choice, gauss
 from time import time
 
 def random_dodge(car: Car, direction = None) -> Dodge:
+    if direction is None:
+        direction = vec2(car.forward())
     dodge = Dodge(car)
-    # dodge.trigger_distance = 600
-    dodge.delay = 0.3
-    # dodge.delay = uniform(0.3, 1.3)
     dodge.duration = 0.15
-    dodge.direction = direction if direction is not None else car.forward()#choice(directions)#vec2(car.forward())
-
+    dodge.delay = 0.3
+    # dodge.delay = uniform(0.25, 0.5)
+    dodge.direction = direction
+    dodge.preorientation = axis_to_rotation(vec3(gauss(0.0, 1.0), gauss(0.0, 1.0), gauss(0.0, 1.0)))
     # dodge.preorientation = dot(axis_to_rotation(vec3(0, 0, 3)), car.rotation)
-    # dodge.preorientation = axis_to_rotation(vec3(uniform(-1.0, 1.0), uniform(-1.0, 1.0), uniform(-1.0, 1.0)))
     # dodge.direction = vec2(uniform(-1.0, 1.0), uniform(-1.0, 1.0))
     return dodge
 
@@ -73,29 +73,6 @@ def simulate_dodge(self, dodge: Dodge, target: vec3 = None):
     if not hit: return None
     return min_error
 
-def simulate_alternate_dodges(self):
-    assert self.ground_target is not None
-
-    tick_deadline = self.tick_start + (1.0 / 120.0)
-    dodges_tried = 0
-    while time() < tick_deadline:
-        c = Car(self.game.my_car)
-        t = to_vec3(self.ground_target)
-        dodge = random_dodge(c)
-        perturbator = vec3(randint(-200, 200), randint(-200, 200), randint(-200, 200))
-        ground_target = t + perturbator
-        ground_target = Vec3(ground_target[0], ground_target[1], ground_target[2])
-
-        error = simulate_dodge(self, dodge, ground_target)
-        dodges_tried += 1
-
-        if error is not None and (self.dodge_error is None or norm(error) < norm(self.dodge_error)):
-            self.dodge = dodge
-            self.ground_target = Vec3(ground_target[0], ground_target[1], ground_target[2])
-            print('Found a better dodge!')
-
-    print(f'Tried {dodges_tried} dodges')
-
 def get_dodge(self, car: Car, ball: Ball, target: vec3):
     # Try every direction
     directions = [
@@ -113,9 +90,12 @@ def get_dodge(self, car: Car, ball: Ball, target: vec3):
     # Record the best result (min dist from target)
     best_dodge = None
     min_error = None
-    for direction in directions:
-        dodge = random_dodge(car, direction)
+    num_sims = 0
+    tick_deadline = self.tick_start + (1.0 / 120.0)
+    while time() < tick_deadline:
+        dodge = random_dodge(car, choice(directions))
         error = dodge.simulate_hit(car, ball, target)
+        num_sims += 1
         # error = simulate_dodge(self, dodge)#dodge.simulate_hit(car, ball, target)#
         # print(f'dodge error for {direction} is {error}')
         # print(f'ball.loc - target is {target - self.game.ball.location}')
@@ -129,7 +109,12 @@ def get_dodge(self, car: Car, ball: Ball, target: vec3):
             min_error = error
             best_dodge = dodge
 
+    print(f'Tried {num_sims} dodges this tick')
     return best_dodge
+
+##################################################################################################################
+############################################## BUILD THE WALL ####################################################
+##################################################################################################################
 
 def try_init_dodge(self):
     if self.dodge is not None and self.dodge.finished:
@@ -159,8 +144,6 @@ def dodge_controls(self, carState):
     self.dodge_started = True
     self.dodge.step(self.game.time_delta)
     return self.dodge.controls
-    
-####
 
 def init_dodge_old(self):
     # Get values
@@ -309,3 +292,26 @@ def simulate_alternate_dodges_old(self):
         num_sims += 1
 
     print('tried', num_sims)
+
+def simulate_alternate_dodges(self):
+    assert self.ground_target is not None
+
+    tick_deadline = self.tick_start + (1.0 / 120.0)
+    dodges_tried = 0
+    while time() < tick_deadline:
+        c = Car(self.game.my_car)
+        t = to_vec3(self.ground_target)
+        dodge = random_dodge(c)
+        perturbator = vec3(randint(-200, 200), randint(-200, 200), randint(-200, 200))
+        ground_target = t + perturbator
+        ground_target = Vec3(ground_target[0], ground_target[1], ground_target[2])
+
+        error = simulate_dodge(self, dodge, ground_target)
+        dodges_tried += 1
+
+        if error is not None and (self.dodge_error is None or norm(error) < norm(self.dodge_error)):
+            self.dodge = dodge
+            self.ground_target = Vec3(ground_target[0], ground_target[1], ground_target[2])
+            print('Found a better dodge!')
+
+    print(f'Tried {dodges_tried} dodges')

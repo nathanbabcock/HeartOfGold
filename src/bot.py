@@ -44,8 +44,9 @@ class HeartOfGold(BaseAgent):
 
         self.dodge = None
         self.dodge_started = False
-        self.dodge_error = None
-        #self.ground_target = None
+        # self.dodge_error = None
+        self.best_dodge = None
+        self.best_dodge_sims = 0
 
         self.time_estimate = None
         self.speed_estimate = None
@@ -109,24 +110,51 @@ class HeartOfGold(BaseAgent):
             if self.dodge.finished: self.dodge = None
             else: return
 
-        # Try dodging whenever possible/whenever close to the ball
-        if norm(self.game.my_car.location - self.game.ball.location) < norm(self.game.my_car.velocity):
-            self.dodge = get_dodge(self, self.game.my_car, self.game.ball, self.target)#random_dodge(self.game.my_car)
-            if self.dodge is not None: return
+        # Simulate dodges whenever pointing at the intercept location
+        pointing_at_intercept = self.intercept is not None and angle_between(self.intercept.location - self.game.my_car.location, self.game.my_car.forward()) < pi / 8
+        about_to_trigger = self.best_dodge and norm(self.game.ball.location - self.game.my_car.location) < self.best_dodge.trigger_distance + 400
+        if pointing_at_intercept or about_to_trigger:
+            if self.best_dodge is not None:
+                self.best_dodge.error = simulate_dodge(self.best_dodge, self.game.my_car, self.game.ball, self.target, self.intercept.location)
+                self.best_dodge_sims += 1
+            alt_best_dodge = get_dodge(self, self.game.my_car, self.game.ball, self.target)
+            if self.best_dodge is None or (alt_best_dodge is not None and norm(alt_best_dodge.error) < norm(self.best_dodge.error)):
+                # print('Replacing old best dodge with a better one')
+                self.best_dodge = alt_best_dodge
+        # If no longer pointing towards our target, abandon all previous plans of dodging
+        else:
+            if self.best_dodge_sims > 0: print(f'Abandoning a dodge after {self.best_dodge_sims} trials')
+            # print('intercept', self.intercept is None)
+            self.best_dodge = None
+            self.best_dodge_sims = 0
 
-        # Simulate current intercept
-        # if self.intercept is not None and self.intercept.purpose == 'ball':
-        #     error = self.intercept.simulate(self)
-        #     if error is None: self.intercept = None
-        #     else: return
+        # Commit to a pre-simulated dodge once we hit the trigger dist
+        if self.best_dodge is not None and norm(self.intercept.location - self.game.my_car.location) <= self.best_dodge.trigger_distance:
+            print(f'Committing to dodge after {self.best_dodge_sims} trials')
+            print(f'Trigger dist = {self.best_dodge.trigger_distance}')
+            # print(f'Trigger dist = {self.best_dodge.trigger_distance}')
+            # print(f'Trigger distance: {self.best_dodge.trigger_distance}')
+            # print(f'Intercept location: {self.intercept.location}')
+            # print(f'My location: {self.game.my_car.location}')
+            self.dodge = self.best_dodge
+            self.best_dodge = None
+            self.best_dodge_sims = 0
+
+        # if norm(self.game.my_car.location - self.game.ball.location) < norm(self.game.my_car.velocity):
+        #     self.dodge = get_dodge(self, self.game.my_car, self.game.ball, self.target)#random_dodge(self.game.my_car)
+        #     if self.dodge is not None: return
 
         # Calculate new intercept
-        if norm(self.game.my_car.location - self.target) > norm(self.game.ball.location - self.target):
+        not_repositioning = True # self.intercept is None or self.intercept.purpose != 'position'
+        not_ahead_of_ball = norm(self.game.my_car.location - self.target) > norm(self.game.ball.location - self.target)
+        if not_repositioning and not_ahead_of_ball:
             self.intercept = Intercept.calculate(self.game.my_car, self.game.ball)
             if self.intercept is not None: return
 
         # Otherwise, try to get in position
-        waypoint = normalize(self.game.ball.location - self.target) * 5 * norm(self.game.ball.velocity) + self.game.ball.location
+        waypoint = vec3(self.game.ball.location)
+        waypoint[1] -= 2500
+        waypoint[2] = 0
         self.intercept = Intercept(waypoint)
         self.intercept.boost = False
         self.intercept.purpose = 'position'
@@ -150,7 +178,7 @@ class HeartOfGold(BaseAgent):
             Game.set_mode('soccar')
             self.game = Game(self.index, self.team)
             self.game.read_game_information(packet, self.get_rigid_body_tick(), self.get_field_info())
-            self.target = vec3(0, 5120 if self.team is 0 else -5120, 642.775 / 2) # Opposing net
+            self.target = vec3(0, 5120 + 880/2 if self.team is 0 else -(5120 + 880/2), 642.775 / 2) # Opposing net
             self.reset_gamestate()
             print('TEAM', self.team)
             return SimpleControllerState()

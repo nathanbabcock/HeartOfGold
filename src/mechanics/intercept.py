@@ -136,7 +136,7 @@ class Intercept():
         on_back_wall = abs(intercept.location[1]) >= 5120 - collision_radius
         on_side_wall = abs(intercept.location[0]) >= 4096 - collision_radius
         # on_cieling = intercept.location[2] >= 2044 - collision_radius
-        reachable = on_ground or on_back_wall or on_side_wall # or on_cieling
+        reachable = on_ground # or on_back_wall or on_side_wall # or on_cieling
         if not reachable:
             return None
 

@@ -18,6 +18,7 @@ def random_dodge(car: Car, direction = None) -> Dodge:
     dodge = Dodge(car)
     dodge.duration = 0.15
     dodge.delay = 0.3
+    dodge.trigger_distance = randint(50, 1500)
     # dodge.delay = uniform(0.25, 0.5)
     dodge.direction = direction
     dodge.preorientation = axis_to_rotation(vec3(gauss(0.0, 1.0), gauss(0.0, 1.0), gauss(0.0, 1.0)))
@@ -34,7 +35,70 @@ def copy_dodge(dodge: Dodge, car: Car) -> Dodge:
     dodge_copy.preorientation = dodge.preorientation
     return dodge_copy
 
-def simulate_dodge(self, dodge: Dodge, target: vec3 = None):
+def simulate_dodge(dodge: Dodge, car: Car, ball: Ball, target: vec3, intercept: vec3):
+    # First, advance the car to the trigger distance
+    car = Car(car)
+    ball = Ball(ball)
+    dt = 1.0 / 60.0
+    direction = normalize(intercept - car.location)
+    translation_dist = norm(intercept - car.location) - dodge.trigger_distance
+    translation = direction * translation_dist
+    sim_start_state: ThrottleFrame = BoostAnalysis().travel_distance(translation_dist, norm(car.velocity))
+    car.velocity = direction * sim_start_state.speed
+    car.location += translation
+    car.time += sim_start_state.time
+
+    # Advance the ball the same amount
+    while ball.time < car.time:
+        ball.step(dt)
+
+    # Then run the simulation in C++
+    return dodge.simulate_hit(car, ball, target)
+
+def get_dodge(self, car: Car, ball: Ball, target: vec3):
+    # Try every direction
+    directions = [
+        vec2(0.0, 0.0), # double jump (up)
+        vec2(car.forward()),
+        vec2(car.left()),
+        vec2(-1.0 * car.left()), # right
+        vec2(-1.0 * car.forward()), # back
+        vec2(car.forward() + car.left()), # forward left
+        vec2(car.forward() - car.left()), # forward right
+        vec2(-1.0 * car.forward() + car.left()), # back left
+        vec2(-1.0 * car.forward() - car.left()), # back right
+    ]
+
+    # Record the best result (min dist from target)
+    best_dodge = None
+    min_error = None
+    num_sims = 0
+    tick_deadline = self.tick_start + (1.0 / 120.0)
+    while time() < tick_deadline:
+        dodge = random_dodge(car, choice(directions))
+        # error = dodge.simulate_hit(car, ball, target)
+        error = simulate_dodge(dodge, car, ball, target, self.intercept.location)
+        num_sims += 1
+
+        # Check if ball not hit
+        if norm(error) > 999999:
+            continue
+
+        # Set new best dodge
+        if min_error is None or norm(error) < norm(min_error):
+            min_error = error
+            best_dodge = dodge
+            best_dodge.error = error
+
+    # print(f'Tried {num_sims} dodges this tick')
+    self.best_dodge_sims += num_sims
+    return best_dodge
+
+##################################################################################################################
+############################################## BUILD THE WALL ####################################################
+##################################################################################################################
+
+def simulate_dodge_old(self, dodge: Dodge, target: vec3 = None):
     if target is None:
         target = self.target
 
@@ -72,49 +136,6 @@ def simulate_dodge(self, dodge: Dodge, target: vec3 = None):
 
     if not hit: return None
     return min_error
-
-def get_dodge(self, car: Car, ball: Ball, target: vec3):
-    # Try every direction
-    directions = [
-        vec2(0.0, 0.0), # double jump (up)
-        vec2(car.forward()),
-        vec2(car.left()),
-        vec2(-1.0 * car.left()), # right
-        vec2(-1.0 * car.forward()), # back
-        vec2(car.forward() + car.left()), # forward left
-        vec2(car.forward() - car.left()), # forward right
-        vec2(-1.0 * car.forward() + car.left()), # back left
-        vec2(-1.0 * car.forward() - car.left()), # back right
-    ]
-
-    # Record the best result (min dist from target)
-    best_dodge = None
-    min_error = None
-    num_sims = 0
-    tick_deadline = self.tick_start + (1.0 / 120.0)
-    while time() < tick_deadline:
-        dodge = random_dodge(car, choice(directions))
-        error = dodge.simulate_hit(car, ball, target)
-        num_sims += 1
-        # error = simulate_dodge(self, dodge)#dodge.simulate_hit(car, ball, target)#
-        # print(f'dodge error for {direction} is {error}')
-        # print(f'ball.loc - target is {target - self.game.ball.location}')
-
-        # Check if ball not hit
-        if norm(error) > 999999:
-            continue
-
-        # Set new best dodge
-        if min_error is None or norm(error) < norm(min_error):
-            min_error = error
-            best_dodge = dodge
-
-    print(f'Tried {num_sims} dodges this tick')
-    return best_dodge
-
-##################################################################################################################
-############################################## BUILD THE WALL ####################################################
-##################################################################################################################
 
 def try_init_dodge(self):
     if self.dodge is not None and self.dodge.finished:

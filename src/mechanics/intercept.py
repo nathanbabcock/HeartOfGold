@@ -123,7 +123,9 @@ class Intercept():
             if norm(ball_location - intercept.location) <= b.collision_radius + c.hitbox().half_width[0]:
                 # if i != 1: print(f'Intercept convergence in {i} iterations')
                 break
+
             intercept.location = ball_location
+            intercept.location[2] = 0
             intercept.time = ball_index / 60.0
             i += 1
 
@@ -131,13 +133,13 @@ class Intercept():
             print(f'Warning: max tries ({max_tries}) exceeded for calculating intercept')
 
         # Intercept is only meant for ground paths (and walls/cieling are only indirectly supported)
-        collision_radius = c.hitbox().half_width[2] * 2 + b.collision_radius
-        on_ground = intercept.location[2] <= collision_radius
-        on_back_wall = abs(intercept.location[1]) >= 5120 - collision_radius
-        on_side_wall = abs(intercept.location[0]) >= 4096 - collision_radius
-        # on_cieling = intercept.location[2] >= 2044 - collision_radius
-        reachable = on_ground # or on_back_wall or on_side_wall # or on_cieling
-        if not reachable:
-            return None
+        # collision_radius = c.hitbox().half_width[2] * 2 + b.collision_radius + b.collision_radius * 8
+        # on_ground = intercept.location[2] <= collision_radius
+        # on_back_wall = abs(intercept.location[1]) >= 5120 - collision_radius
+        # on_side_wall = abs(intercept.location[0]) >= 4096 - collision_radius
+        # # on_cieling = intercept.location[2] >= 2044 - collision_radius
+        # reachable = on_ground # or on_back_wall or on_side_wall # or on_cieling
+        # if not reachable:
+        #     return None
 
         return intercept

@@ -12,28 +12,85 @@ from analysis.throttle import *
 from random import randint, uniform, choice, gauss
 from time import time
 
-def random_dodge(car: Car, direction = None) -> Dodge:
-    if direction is None:
-        direction = vec2(car.forward())
+def clamp(n, smallest, largest): return max(smallest, min(n, largest))
+
+def random_dodge(car: Car, seed: Dodge = None, epsilon: float = 1.0) -> Dodge:
+    directions = [
+        vec2(0.0, 0.0), # double jump (up)
+        vec2(car.forward()),
+        vec2(car.left()),
+        vec2(-1.0 * car.left()), # right
+        vec2(-1.0 * car.forward()), # back
+        vec2(car.forward() + car.left()), # forward left
+        vec2(car.forward() - car.left()), # forward right
+        vec2(-1.0 * car.forward() + car.left()), # back left
+        vec2(-1.0 * car.forward() - car.left()), # back right
+    ]
+
+    trigger_distance_absolute_min = trigger_distance_min = 50
+    trigger_distance_absolute_max = trigger_distance_max = 2500
+    trigger_distance_absolute_range = trigger_distance_absolute_max - trigger_distance_absolute_min
+    if seed is not None:
+        trigger_distance_min = int(round(max(seed.trigger_distance - epsilon * trigger_distance_absolute_range / 2, trigger_distance_absolute_min)))
+        trigger_distance_max = int(round(min(seed.trigger_distance + epsilon * trigger_distance_absolute_range / 2, trigger_distance_absolute_max)))
+
+    if trigger_distance_max < trigger_distance_min:
+        trigger_distance_max = trigger_distance_min
+
+    delay_absolute_min = delay_min = 0.3
+    delay_absolute_max = delay_max = 0.6
+    delay_absolute_range = delay_absolute_max - delay_absolute_min
+    if seed is not None:
+        delay_min = max(seed.delay - epsilon * delay_absolute_range / 2, delay_absolute_min)
+        delay_max = min(seed.delay + epsilon * delay_absolute_range / 2, delay_absolute_max)
+
+    if seed is not None and epsilon < 0.15:
+        direction = seed.direction
+    else:
+        direction = choice(directions)
+
     dodge = Dodge(car)
     dodge.duration = 0.15
+    # dodge.delay = uniform(delay_min, delay_max)
     dodge.delay = 0.3
-    dodge.trigger_distance = randint(50, 1500)
-    # dodge.delay = uniform(0.25, 0.5)
+    dodge.trigger_distance = randint(trigger_distance_min, trigger_distance_max)
     dodge.direction = direction
-    dodge.preorientation = axis_to_rotation(vec3(gauss(0.0, 1.0), gauss(0.0, 1.0), gauss(0.0, 1.0)))
+    dodge.preorientation = axis_to_rotation(vec3(gauss(0.0, 0.4), gauss(0.0, 0.4), gauss(0.0, 0.4)) + car.forward())
     # dodge.preorientation = dot(axis_to_rotation(vec3(0, 0, 3)), car.rotation)
     # dodge.direction = vec2(uniform(-1.0, 1.0), uniform(-1.0, 1.0))
     return dodge
 
-def copy_dodge(dodge: Dodge, car: Car) -> Dodge:
-    dodge_copy = Dodge(car)
-    dodge_copy.delay = dodge.delay
-    dodge_copy.trigger_distance = dodge.trigger_distance
-    dodge_copy.duration = dodge.duration
-    dodge_copy.direction = dodge.direction
-    dodge_copy.preorientation = dodge.preorientation
-    return dodge_copy
+def get_dodge(self, car: Car, ball: Ball, target: vec3):
+    # Record the best result (min dist from target)
+    best_dodge = None
+    min_error = None
+    num_sims = 0
+    tick_deadline = self.tick_start + (1.0 / 120.0)
+    while time() < tick_deadline:
+        if self.best_dodge is not None:
+            total_dist = self.best_dodge_start_dist - self.best_dodge.trigger_distance
+            cur_dist = norm(self.intercept.location - car.location) - self.best_dodge.trigger_distance
+            epsilon = cur_dist / total_dist
+            dodge = random_dodge(car, self.best_dodge, epsilon)
+        else:
+            dodge = random_dodge(car)
+        # error = dodge.simulate_hit(car, ball, target)
+        error = simulate_dodge(dodge, car, ball, target, self.intercept.location)
+        num_sims += 1
+
+        # Check if ball not hit
+        if norm(error) > 999999:
+            continue
+
+        # Set new best dodge
+        if min_error is None or norm(error) < norm(min_error):
+            min_error = error
+            best_dodge = dodge
+            best_dodge.error = error
+
+    # print(f'Tried {num_sims} dodges this tick')
+    self.best_dodge_sims += num_sims
+    return best_dodge
 
 def simulate_dodge(dodge: Dodge, car: Car, ball: Ball, target: vec3, intercept: vec3):
     # First, advance the car to the trigger distance
@@ -55,48 +112,18 @@ def simulate_dodge(dodge: Dodge, car: Car, ball: Ball, target: vec3, intercept: 
     # Then run the simulation in C++
     return dodge.simulate_hit(car, ball, target)
 
-def get_dodge(self, car: Car, ball: Ball, target: vec3):
-    # Try every direction
-    directions = [
-        vec2(0.0, 0.0), # double jump (up)
-        vec2(car.forward()),
-        vec2(car.left()),
-        vec2(-1.0 * car.left()), # right
-        vec2(-1.0 * car.forward()), # back
-        vec2(car.forward() + car.left()), # forward left
-        vec2(car.forward() - car.left()), # forward right
-        vec2(-1.0 * car.forward() + car.left()), # back left
-        vec2(-1.0 * car.forward() - car.left()), # back right
-    ]
-
-    # Record the best result (min dist from target)
-    best_dodge = None
-    min_error = None
-    num_sims = 0
-    tick_deadline = self.tick_start + (1.0 / 120.0)
-    while time() < tick_deadline:
-        dodge = random_dodge(car, choice(directions))
-        # error = dodge.simulate_hit(car, ball, target)
-        error = simulate_dodge(dodge, car, ball, target, self.intercept.location)
-        num_sims += 1
-
-        # Check if ball not hit
-        if norm(error) > 999999:
-            continue
-
-        # Set new best dodge
-        if min_error is None or norm(error) < norm(min_error):
-            min_error = error
-            best_dodge = dodge
-            best_dodge.error = error
-
-    # print(f'Tried {num_sims} dodges this tick')
-    self.best_dodge_sims += num_sims
-    return best_dodge
-
 ##################################################################################################################
 ############################################## BUILD THE WALL ####################################################
 ##################################################################################################################
+
+def copy_dodge(dodge: Dodge, car: Car) -> Dodge:
+    dodge_copy = Dodge(car)
+    dodge_copy.delay = dodge.delay
+    dodge_copy.trigger_distance = dodge.trigger_distance
+    dodge_copy.duration = dodge.duration
+    dodge_copy.direction = dodge.direction
+    dodge_copy.preorientation = dodge.preorientation
+    return dodge_copy
 
 def simulate_dodge_old(self, dodge: Dodge, target: vec3 = None):
     if target is None:

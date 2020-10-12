@@ -65,9 +65,9 @@ class HeartOfGold(BaseAgent):
         self.last_dist = None
         self.last_touch_location = Vec3(0, 0, 0)
 
-    def reset_for_path_planning(self):
+    def reset_for_ground_shots(self):
         self.initial_ball_location = Vector3(0, 2000, 100)
-        self.initial_ball_velocity = Vector3(randint(-1000, 1000), randint(-1000, 1000), 0)
+        self.initial_ball_velocity = Vector3(randint(-1000, 1000), randint(-1000, 1000), randint(0, 750))
         self.initial_car_location = Vector3(randint(-2000, 2000), 0, 0)
         self.initial_car_velocity = Vector3(0, 0, 0)
         self.not_hit_yet = True
@@ -79,7 +79,7 @@ class HeartOfGold(BaseAgent):
         print('> reset_gamestate()')
 
         # Initialize inputs
-        self.reset_for_path_planning()
+        self.reset_for_ground_shots()
         t = self.target
         b = Ball(self.game.ball)
         c = Car(self.game.cars[self.index])
@@ -92,8 +92,9 @@ class HeartOfGold(BaseAgent):
         c.rotation = look_at(vec3(b.location[0] - c.location[0], b.location[1] - c.location[1], 0), vec3(0, 0, 1))
         rotator = rotation_to_euler(c.rotation)
 
-        # Wait
+        # Reset
         self.aerial = None
+        self.dodge = None
         self.rotation_input = None
         self.timer = 0.0
 
@@ -225,14 +226,30 @@ class HeartOfGold(BaseAgent):
             return SimpleControllerState()
         # "Do a flip!"
         elif self.dodge is not None:
+            if self.dodge.finished:
+                self.dodge = None
+                return SimpleControllerState()
             self.dodge.step(self.game.time_delta)
-            return self.dodge.controls
+            controls = self.dodge.controls
+            controls.boost = True
+            return controls
         # Just do an aerial :4head:
         elif self.aerial is not None:
             aerial_step(self.aerial, Car(self.game.my_car), self.rotation_input, self.game.time_delta)
             return self.aerial.controls
         # Just hit the ball :4head:
         elif self.intercept is not None:
+            if self.intercept.dodge and self.game.time > self.intercept.jump_time:
+                print('im gonna nut')
+                self.dodge = Dodge(self.game.my_car)
+                self.dodge.duration = 0.2
+                self.dodge.preorientation = self.intercept.dodge_preorientation
+                self.dodge.delay = self.intercept.dodge_delay + 0.1
+                self.dodge.direction = self.intercept.dodge_direction
+                self.dodge.step(self.game.time_delta)
+                controls = self.dodge.controls
+                controls.boost = True
+                return controls
             return self.intercept.get_controls(my_car, self.game.my_car) #drive_at(self, my_car, self.intercept.location)
 
         return SimpleControllerState()

@@ -91,7 +91,7 @@ class Intercept():
         return controls
 
     @staticmethod
-    def calculate(car: Car, ball: Ball, ball_predictions = None):
+    def calculate(car: Car, ball: Ball, target: vec3, ball_predictions = None):
         # Init vars
         c = Car(car)
         b = Ball(ball)
@@ -109,10 +109,26 @@ class Intercept():
         intercept = Intercept(b.location)
         intercept.purpose = 'ball'
         intercept.boost = True
+        intercept_ball_position = vec3(b.location)
         i = 0
-        max_tries = 25
+        max_tries = 100
+        analyzer = BoostAnalysis() if intercept.boost else ThrottleAnalysis()
         while i < max_tries:
-            analyzer = BoostAnalysis() if intercept.boost else ThrottleAnalysis()
+            # Find optimal spot to hit the ball
+            optimal_hit_vector = normalize(target - intercept_ball_position) * b.collision_radius
+            optimal_hit_location = intercept_ball_position - optimal_hit_vector
+            # if optimal_hit_location[2] < c.hitbox().half_width[2] * 2: # don't intersect with the ground...
+            optimal_hit_location[2] = 0
+
+            # print(f'Ball location {b.location}')
+            # print(f'Optimal hit vector {optimal_hit_vector}')
+            # print(f'Optimal hit location {optimal_hit_location}')
+            # todo handle optimal hit locations behind the ball?
+            car_front_center = c.location + normalize(c.forward()) * c.hitbox().half_width[0] + normalize(c.up()) * c.hitbox().half_width[2]
+            translation_delta = optimal_hit_location - car_front_center # try to position the car's front center directly on top of the best hit vector
+            translation_delta[2] = 0 # ignore verticality for now
+            intercept.location = c.location + translation_delta
+
             analysis = analyzer.travel_distance(norm(intercept.location - c.location), norm(c.velocity))
             ball_index = int(round(analysis.time * 60))
             if ball_index >= len(ball_predictions):
@@ -120,13 +136,15 @@ class Intercept():
                 intercept.time = len(ball_predictions) * 60
                 break
             ball_location = ball_predictions[ball_index]
-            if norm(ball_location - intercept.location) <= b.collision_radius + c.hitbox().half_width[0]:
-                # if i != 1: print(f'Intercept convergence in {i} iterations')
+            # print(f'Iteration {i} distance {norm(ball_location + vec3(optimal_hit_vector[0], optimal_hit_vector[1], 0) - intercept.location)}')
+            if norm(ball_location - intercept_ball_position) <= 1:
+                print(f'Intercept convergence in {i} iterations')
                 break
 
-            intercept.location = ball_location
-            intercept.location[2] = 0
-            intercept.time = ball_index / 60.0
+            intercept_ball_position = vec3(ball_location)
+            # intercept.location = vec3(ball_location)
+            # intercept.location[2] = 0
+            intercept.time = c.time + (ball_index / 60.0)
             i += 1
 
         if i >= max_tries:

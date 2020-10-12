@@ -67,7 +67,7 @@ class HeartOfGold(BaseAgent):
 
     def reset_for_path_planning(self):
         self.initial_ball_location = Vector3(0, 2000, 100)
-        self.initial_ball_velocity = Vector3(randint(-1000, 1000), randint(-1000, 1000), randint(0, 900))
+        self.initial_ball_velocity = Vector3(randint(-1000, 1000), randint(-1000, 1000), 0)
         self.initial_car_location = Vector3(randint(-2000, 2000), 0, 0)
         self.initial_car_velocity = Vector3(0, 0, 0)
         self.not_hit_yet = True
@@ -112,38 +112,38 @@ class HeartOfGold(BaseAgent):
             else: return
 
         # Simulate dodges whenever pointing at the intercept location
-        pointing_at_intercept = self.intercept is not None and angle_between(self.intercept.location - self.game.my_car.location, self.game.my_car.forward()) < pi / 8
-        about_to_trigger = self.best_dodge and norm(self.game.ball.location - self.game.my_car.location) < self.best_dodge.trigger_distance + 400
-        if pointing_at_intercept or about_to_trigger:
-            if self.best_dodge is not None:
-                self.best_dodge.error = simulate_dodge(self.best_dodge, self.game.my_car, self.game.ball, self.target, self.intercept.location)
-                print(f'best dodge error, {norm(self.best_dodge.error)}')
-                self.best_dodge_sims += 1
-            alt_best_dodge = get_dodge(self, self.game.my_car, self.game.ball, self.target)
-            if self.best_dodge is None or (alt_best_dodge is not None and norm(alt_best_dodge.error) < norm(self.best_dodge.error)):
-                # print('Replacing old best dodge with a better one')
-                self.best_dodge = alt_best_dodge
-                self.best_dodge_start_dist = norm(self.intercept.location - self.game.my_car.location)
-        # If no longer pointing towards our target, abandon all previous plans of dodging
-        else:
-            if self.best_dodge_sims > 0: print(f'Abandoning a dodge after {self.best_dodge_sims} trials')
-            # print('intercept', self.intercept is None)
-            self.best_dodge = None
-            self.best_dodge_sims = 0
-            self.best_dodge_start_dist = 0
+        # pointing_at_intercept = self.intercept is not None and angle_between(self.intercept.location - self.game.my_car.location, self.game.my_car.forward()) < pi / 8
+        # about_to_trigger = self.best_dodge and norm(self.game.ball.location - self.game.my_car.location) < self.best_dodge.trigger_distance + 400
+        # if pointing_at_intercept or about_to_trigger:
+        #     if self.best_dodge is not None:
+        #         self.best_dodge.error = simulate_dodge(self.best_dodge, self.game.my_car, self.game.ball, self.target, self.intercept.location)
+        #         print(f'best dodge error, {norm(self.best_dodge.error)}')
+        #         self.best_dodge_sims += 1
+        #     alt_best_dodge = get_dodge(self, self.game.my_car, self.game.ball, self.target)
+        #     if self.best_dodge is None or (alt_best_dodge is not None and norm(alt_best_dodge.error) < norm(self.best_dodge.error)):
+        #         # print('Replacing old best dodge with a better one')
+        #         self.best_dodge = alt_best_dodge
+        #         self.best_dodge_start_dist = norm(self.intercept.location - self.game.my_car.location)
+        # # If no longer pointing towards our target, abandon all previous plans of dodging
+        # else:
+        #     if self.best_dodge_sims > 0: print(f'Abandoning a dodge after {self.best_dodge_sims} trials')
+        #     # print('intercept', self.intercept is None)
+        #     self.best_dodge = None
+        #     self.best_dodge_sims = 0
+        #     self.best_dodge_start_dist = 0
 
         # Commit to a pre-simulated dodge once we hit the trigger dist
-        if self.best_dodge is not None and norm(self.intercept.location - self.game.my_car.location) <= self.best_dodge.trigger_distance:
-            print(f'Committing to dodge after {self.best_dodge_sims} trials')
-            print(f'Trigger dist = {self.best_dodge.trigger_distance}')
-            # print(f'Trigger dist = {self.best_dodge.trigger_distance}')
-            # print(f'Trigger distance: {self.best_dodge.trigger_distance}')
-            # print(f'Intercept location: {self.intercept.location}')
-            # print(f'My location: {self.game.my_car.location}')
-            self.dodge = self.best_dodge
-            self.best_dodge = None
-            self.best_dodge_sims = 0
-            self.best_dodge_start_dist = 0
+        # if self.best_dodge is not None and norm(self.intercept.location - self.game.my_car.location) <= self.best_dodge.trigger_distance:
+        #     print(f'Committing to dodge after {self.best_dodge_sims} trials')
+        #     print(f'Trigger dist = {self.best_dodge.trigger_distance}')
+        #     # print(f'Trigger dist = {self.best_dodge.trigger_distance}')
+        #     # print(f'Trigger distance: {self.best_dodge.trigger_distance}')
+        #     # print(f'Intercept location: {self.intercept.location}')
+        #     # print(f'My location: {self.game.my_car.location}')
+        #     self.dodge = self.best_dodge
+        #     self.best_dodge = None
+        #     self.best_dodge_sims = 0
+        #     self.best_dodge_start_dist = 0
 
         # if norm(self.game.my_car.location - self.game.ball.location) < norm(self.game.my_car.velocity):
         #     self.dodge = get_dodge(self, self.game.my_car, self.game.ball, self.target)#random_dodge(self.game.my_car)
@@ -153,7 +153,7 @@ class HeartOfGold(BaseAgent):
         not_repositioning = True # self.intercept is None or self.intercept.purpose != 'position'
         not_ahead_of_ball = norm(self.game.my_car.location - self.target) > norm(self.game.ball.location - self.target)
         if not_repositioning and not_ahead_of_ball:
-            self.intercept = Intercept.calculate(self.game.my_car, self.game.ball)
+            self.intercept = Intercept.calculate(self.game.my_car, self.game.ball, self.target)
             if self.intercept is not None: return
 
         # Otherwise, try to get in position

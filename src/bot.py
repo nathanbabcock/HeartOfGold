@@ -153,7 +153,9 @@ class HeartOfGold(BaseAgent):
         # Calculate new intercept
         not_repositioning = True # self.intercept is None or self.intercept.purpose != 'position'
         not_ahead_of_ball = norm(self.game.my_car.location - self.target) > norm(self.game.ball.location - self.target)
-        if not_repositioning and not_ahead_of_ball:
+        on_ground = self.game.my_car.location[2] < 18
+        about_to_commit = False # self.intercept and self.intercept.dodge and self.game.time >= self.intercept.jump_time
+        if on_ground and not_repositioning and not_ahead_of_ball and not about_to_commit:
             self.intercept = Intercept.calculate(self.game.my_car, self.game.ball, self.target)
             if self.intercept is not None: return
 
@@ -230,16 +232,14 @@ class HeartOfGold(BaseAgent):
                 self.dodge = None
                 return SimpleControllerState()
             self.dodge.step(self.game.time_delta)
-            controls = self.dodge.controls
-            controls.boost = True
-            return controls
+            return self.dodge.controls
         # Just do an aerial :4head:
         elif self.aerial is not None:
             aerial_step(self.aerial, Car(self.game.my_car), self.rotation_input, self.game.time_delta)
             return self.aerial.controls
         # Just hit the ball :4head:
         elif self.intercept is not None:
-            if self.intercept.dodge and self.game.time > self.intercept.jump_time:
+            if self.intercept.dodge and abs(self.game.time - self.intercept.jump_time) <= self.game.time_delta:
                 print('im gonna nut')
                 self.dodge = Dodge(self.game.my_car)
                 self.dodge.duration = 0.2
@@ -247,9 +247,7 @@ class HeartOfGold(BaseAgent):
                 self.dodge.delay = self.intercept.dodge_delay + 0.1
                 self.dodge.direction = self.intercept.dodge_direction
                 self.dodge.step(self.game.time_delta)
-                controls = self.dodge.controls
-                controls.boost = True
-                return controls
+                return self.dodge.controls
             return self.intercept.get_controls(my_car, self.game.my_car) #drive_at(self, my_car, self.intercept.location)
 
         return SimpleControllerState()

@@ -23,12 +23,45 @@ class BoostAnalysis():
                 closest = frame
         return closest.copy()
 
+    def get_index_by_speed(self, speed: float) -> ThrottleFrame:
+        closest = None
+        closest_index = 0
+        index = 0
+        for frame in self.frames:
+            if closest == None or abs(frame.speed - speed) < abs(closest.speed - speed):
+                closest = frame
+                closest_index = index
+            index += 1
+        return closest_index
+
     # TODO obvious repitition with above, could probably be generalized later
     def get_frame_by_distance(self, distance: float) -> ThrottleFrame:
         closest = None
         for frame in self.frames:
             if closest == None or abs(frame.distance - distance) < abs(closest.distance - distance):
                 closest = frame
+        return closest.copy()
+
+    def get_frame_by_error(self, error_func, start_index = 0):
+        # print('get_frame_by_error')
+        closest = None
+        index = 0
+        for frame in self.frames:
+            # if index >= start_index and closest is not None:
+            #     # print(f'index >= start_index {index >= start_index}')
+            #     print(f'error_func(frame) {error_func(frame)}')
+            #     print(f'error_func(closest) {error_func(closest)}')
+            if index >= start_index and (closest == None or error_func(frame) < error_func(closest)):
+                closest = frame
+            index += 1
+
+        # at the end, explore past the last recorded ThrottleFrame by extrapolating at constant velocity
+        while closest.time >= self.frames[-1].time:
+            extrapolated_frame = ThrottleFrame(closest.time + 1.0/120.0, closest.distance + closest.speed * 1.0/120.0, closest.speed)
+            if error_func(extrapolated_frame) > error_func(closest):
+                return closest.copy()
+            closest = extrapolated_frame
+
         return closest.copy()
 
     def travel_distance(self, distance: float, initial_speed: float = 0):

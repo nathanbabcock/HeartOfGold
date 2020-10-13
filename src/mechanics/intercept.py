@@ -1,14 +1,17 @@
 from rlutilities.simulation import Car, Ball
 from rlutilities.linear_algebra import *
-from analysis.throttle import ThrottleAnalysis
-from analysis.boost import BoostAnalysis
-from analysis.jump import JumpAnalysis
+from analysis.throttle import *
+from analysis.boost import *
+from analysis.jump import *
 from rlbot.agents.base_agent import SimpleControllerState
 from rlbot.utils.game_state_util import CarState
 from util.drive import steer_toward_target
 from util.vec import Vec3
 from util.rlutilities import to_vec3, rotation_to_euler
 from math import pi
+
+def get_car_front_center(car: Car):
+    return car.location + normalize(car.forward()) * car.hitbox().half_width[0] + normalize(car.up()) * car.hitbox().half_width[2]
 
 class Intercept():
     def __init__(self, location: vec3, boost = True):
@@ -95,7 +98,7 @@ class Intercept():
     @staticmethod
     def calculate(car: Car, ball: Ball, target: vec3, ball_predictions = None):
         # Init vars
-        c = Car(car)
+        fake_car = Car(car)
         b = Ball(ball)
 
         # Generate predictions of ball path
@@ -122,38 +125,49 @@ class Intercept():
 
             # Find ideal rotation, unless it intersects with ground
             optimal_rotation = look_at(optimal_hit_vector, vec3(0, 0, 1))#axis_to_rotation(optimal_hit_vector) # this might be wrong
-            fake_car = Car(car)
             fake_car.rotation = optimal_rotation
-            fake_car_front_center = fake_car.location + normalize(fake_car.forward()) * fake_car.hitbox().half_width[0] + normalize(fake_car.up()) * fake_car.hitbox().half_width[2]
-            fake_car_translation_delta = optimal_hit_location - fake_car_front_center # try to position the car's front center directly on top of the best hit vector
-            fake_car.location += fake_car_translation_delta
+            # print(f'fake_car.location {fake_car.location}')
+            # print(f'get_car_front_center(fake_car) {get_car_front_center(fake_car)}')
+            fake_car.location += optimal_hit_location - get_car_front_center(fake_car) # try to position the car's front center directly on top of the best hit vector
             euler = rotation_to_euler(optimal_rotation)
             # todo put some super precise trigonometry in here to find the max angle allowed at given height
             if fake_car.location[2] <= fake_car.hitbox().half_width[0]:
                 euler.pitch = 0
             fake_car.rotation = euler_to_rotation(vec3(euler.pitch, euler.yaw, euler.roll))
-            fake_car_front_center = fake_car.location + normalize(fake_car.forward()) * fake_car.hitbox().half_width[0] + normalize(fake_car.up()) * fake_car.hitbox().half_width[2]
-            fake_car_translation_delta = optimal_hit_location - fake_car_front_center # try to position the car's front center directly on top of the best hit vector
-            fake_car.location += fake_car_translation_delta
+            fake_car.location += optimal_hit_location - get_car_front_center(fake_car) # try to position the car's front center directly on top of the best hit vector
 
             # Adjust vertical position if it (still) intersects with ground
             if fake_car.location[2] < 17.0:
-                fake_car.location[2] = 0
-            fake_car_front_center = fake_car.location + normalize(fake_car.forward()) * fake_car.hitbox().half_width[0] + normalize(fake_car.up()) * fake_car.hitbox().half_width[2]
-            # fake_car_translation_delta = optimal_hit_location - fake_car_front_center # try to position the car's front center directly on top of the best hit vector
-            # fake_car.location += fake_car_translation_delta
-            intercept.location = fake_car.location
+                fake_car.location[2] = 17.0
+            intercept.location = get_car_front_center(fake_car)
 
             # Calculate jump time needed
-            jump_height_time = JumpAnalysis().get_frame_by_height(fake_car.location[2]).time # or solve with motion equation
-            car_euler = rotation_to_euler(c.rotation)
-            jump_pitch_time = (euler.pitch - car_euler.pitch) / 5.5 + 0.2 # disregarding angular acceleration
-            jump_yaw_time = (euler.yaw - car_euler.yaw) / 5.5 + 0.2 # disregarding angular acceleration
-            jump_roll_time = (euler.roll - car_euler.roll) / 5.5 + 0.2 # disregarding angular acceleration
-            jump_time = max(jump_height_time, jump_pitch_time, jump_yaw_time, jump_roll_time)
+            jump_height_time = JumpAnalysis().get_frame_by_height(intercept.location[2]).time # or solve with motion equation
 
-            analysis = analyzer.travel_distance(norm(intercept.location - c.location), norm(c.velocity))
-            ball_index = int(round(analysis.time * 60))
+            # car_euler = rotation_to_euler(car.rotation)
+            # jump_pitch_time = (euler.pitch - car_euler.pitch) / 5.5 + 0.35 # disregarding angular acceleration
+            # jump_yaw_time = (euler.yaw - car_euler.yaw) / 5.5 + 0.35 # disregarding angular acceleration
+            # jump_roll_time = (euler.roll - car_euler.roll) / 5.5 + 0.35 # disregarding angular acceleration
+            # jump_time = max(jump_height_time, jump_pitch_time, jump_yaw_time, jump_roll_time)
+            jump_time = jump_height_time # todo revisit rotation time
+            # print('jump_time', jump_time)
+
+            # Calculate distance to drive before jumping (to arrive perfectly on target)
+            total_translation = intercept.location - get_car_front_center(car)
+            total_translation[2] = 0
+            total_distance = norm(total_translation)
+            start_index = analyzer.get_index_by_speed(norm(car.velocity))
+            start_frame = analyzer.frames[start_index]
+            custom_error_func = lambda frame : abs(total_distance - (frame.distance - start_frame.distance) - frame.speed * jump_time)
+            drive_analysis = analyzer.get_frame_by_error(custom_error_func, start_index)
+            arrival_time = drive_analysis.time - start_frame.time + jump_time
+            # print('drive_analysis.time', drive_analysis.time)
+            # print('drive_analysis', start_index)
+
+            # arrival_time = analyzer.travel_distance(total_distance, norm(car.velocity)).time
+
+            # drive_analysis = analyzer.travel_distance(norm(intercept.location - c.location), norm(c.velocity))
+            ball_index = int(round(arrival_time * 60))
             if ball_index >= len(ball_predictions):
                 intercept.location = ball_predictions[-1]
                 intercept.time = len(ball_predictions) / 60.0
@@ -161,12 +175,27 @@ class Intercept():
             ball_location = ball_predictions[ball_index]
             # print(f'Iteration {i} distance {norm(ball_location + vec3(optimal_hit_vector[0], optimal_hit_vector[1], 0) - intercept.location)}')
             if norm(ball_location - intercept_ball_position) <= 1:
-                intercept.dodge = True
-                intercept.jump_time = c.time + (ball_index / 60.0) - jump_time - 0.2
+                # if norm(intercept_ball_position - get_car_front_center(fake_car)) > 100:
+                #     intercept.location = ball_predictions[-1]
+                #     intercept.time = len(ball_predictions) / 60.0
+                #     return intercept
+
+                intercept.dodge = True #jump_time > 0.2
+                intercept.jump_time = car.time + arrival_time - jump_time
                 intercept.dodge_preorientation = euler_to_rotation(vec3(euler.pitch, euler.yaw, euler.roll))
                 intercept.dodge_delay = jump_time
-                intercept.dodge_direction = vec2(optimal_hit_vector)
-                print(f'Intercept convergence in {i} iterations')
+                intercept.dodge_direction = normalize(vec2(optimal_hit_vector))
+                # print(f'intercept_ball_position', intercept_ball_position)
+                # print(f'intercept.location', intercept.location)
+                # print(f'time until jump {drive_analysis.time}')
+                # print(f'time now {car.time}')
+                # print(f'distance until jump {drive_analysis.distance}')
+                # print(f'total distance to target {total_distance}')
+                # print(f'horiz speed @ jump {drive_analysis.speed}')
+                # print(f'time intended to be in air {jump_time}')
+                # print(f'distance travelled in air {jump_time * drive_analysis.speed}')
+                # print(f'distance remaining to target @ jump {total_distance - drive_analysis.distance}')
+                # print(f'Intercept convergence in {i} iterations')
                 # print(f'desired roll {euler.roll}')
                 # print(f'actual roll {rotation_to_euler(c.rotation).roll}')
                 break
@@ -174,7 +203,7 @@ class Intercept():
             intercept_ball_position = vec3(ball_location)
             # intercept.location = vec3(ball_location)
             # intercept.location[2] = 0
-            intercept.time = c.time + (ball_index / 60.0)
+            intercept.time = arrival_time
             i += 1
 
         if i >= max_tries:

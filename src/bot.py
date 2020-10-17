@@ -28,6 +28,17 @@ from mechanics.aerial import *
 
 from analysis.throttle import *
 
+import csv
+import os
+
+class DodgeFrame:
+    def __init__(self, time, car_pos, car_vel, car_rotator, car_angvel):
+        self.time = time
+        self.car_pos = car_pos
+        self.car_vel = car_vel
+        self.car_rotator = car_rotator
+        self.car_angvel = car_angvel
+
 class HeartOfGold(BaseAgent):
     def __init__(self, name, team, index):
         super().__init__(name, team, index)
@@ -52,6 +63,9 @@ class HeartOfGold(BaseAgent):
         self.time_estimate = None
         self.speed_estimate = None
 
+        self.dodge_start_time = None
+        self.done_recording = False
+
     def initialize_agent(self):
         print('> Alphabot: I N I T I A L I Z E D')
 
@@ -75,11 +89,21 @@ class HeartOfGold(BaseAgent):
         self.last_dist = None
         self.last_touch_location = Vec3(0, 0, 0)
 
+    def reset_for_data_collection(self):
+        self.initial_ball_location = Vector3(2000, 2000, 100)
+        self.initial_ball_velocity = Vector3(0, 0, 0)
+        self.initial_car_location = Vector3(0, 0, 0)
+        self.initial_car_velocity = Vector3(0, 0, 0)
+        self.not_hit_yet = True
+        self.ball_predictions = []
+        self.last_dist = None
+        self.last_touch_location = Vec3(0, 0, 0)
+
     def reset_gamestate(self):
         print('> reset_gamestate()')
 
         # Initialize inputs
-        self.reset_for_ground_shots()
+        self.reset_for_data_collection()
         t = self.target
         b = Ball(self.game.ball)
         c = Car(self.game.cars[self.index])
@@ -89,8 +113,8 @@ class HeartOfGold(BaseAgent):
         c.velocity = to_vec3(self.initial_car_velocity)
 
         # Point car at ball
-        c.rotation = look_at(vec3(b.location[0] - c.location[0], b.location[1] - c.location[1], 0), vec3(0, 0, 1))
-        rotator = rotation_to_euler(c.rotation)
+        # c.rotation = look_at(vec3(b.location[0] - c.location[0], b.location[1] - c.location[1], 0), vec3(0, 0, 1))
+        # rotator = rotation_to_euler(c.rotation)
 
         # Reset
         self.aerial = None
@@ -100,7 +124,7 @@ class HeartOfGold(BaseAgent):
 
         # Set gamestate
         car_state = CarState(boost_amount=100, 
-                     physics=Physics(location=self.initial_car_location, velocity=self.initial_car_velocity, rotation=rotator,
+                     physics=Physics(location=self.initial_car_location, velocity=self.initial_car_velocity, rotation=Rotator(0,0,0),
                      angular_velocity=Vector3(0, 0, 0)))
         ball_state = BallState(Physics(location=self.initial_ball_location, velocity=self.initial_ball_velocity, rotation=Rotator(0, 0, 0), angular_velocity=Vector3(0, 0, 0)))
         game_state = GameState(ball=ball_state, cars={self.index: car_state})
@@ -167,9 +191,49 @@ class HeartOfGold(BaseAgent):
         self.intercept.boost = False
         self.intercept.purpose = 'position'
 
+    def write_csv(self):
+        filename = 'analysis/data/frontflip.csv'
+        # with open('C:/Users/nbabcock/AppData/Local/RLBotGUIX/MyBots/HeartOfGold/src/analysis/data/frontflip.csv', newline='') as csvfile:
+        with open(os.path.join(os.path.dirname(__file__), filename), 'w', newline='') as csvfile:
+            writer = csv.writer(csvfile, delimiter=',', quotechar='|', quoting=csv.QUOTE_MINIMAL)
+            writer.writerow([
+                'time',
+                'car_pos_x',
+                'car_pos_y',
+                'car_pos_z',
+                'car_vel_x',
+                'car_vel_y',
+                'var_vel_z',
+                'car_pitch',
+                'car_yaw',
+                'car_roll',
+                'car_angvel_x',
+                'car_angvel_y',
+                'car_angvel_z'
+            ])
+            for row in self.dodge_frames:
+                writer.writerow([
+                    row.time,
+                    row.car_pos[0],
+                    row.car_pos[1],
+                    row.car_pos[2],
+                    row.car_vel[0],
+                    row.car_vel[1],
+                    row.car_vel[2],
+                    row.car_rotator[0],
+                    row.car_rotator[1],
+                    row.car_rotator[2],
+                    row.car_angvel[0],
+                    row.car_angvel[1],
+                    row.car_angvel[2]
+                ])
+                #self.frames.append(ThrottleFrame(row['time'], row['distance'], row['speed']))
+            print(f'Wrote {len(self.dodge_frames)} frames to {filename}')
+
     def get_output(self, packet: GameTickPacket) -> SimpleControllerState:
         # Record start time
         self.tick_start = time.time()
+        self.timer += 1.0 / 120.0
 
         # Gather some information about our car and the ball
         my_car: CarState = packet.game_cars[self.index]
@@ -201,7 +265,30 @@ class HeartOfGold(BaseAgent):
             self.not_hit_yet = False
 
         # Recalculate intercept every frame
-        self.plan()
+        # self.plan()
+
+        if self.dodge_start_time is not None and self.game.time > self.dodge_start_time + 3.0:
+            self.write_csv()
+            self.dodge_start_time = None
+            self.done_recording = True
+
+        if self.dodge is None and not self.done_recording:
+            self.dodge = Dodge(self.game.my_car)
+            self.dodge_start_time = self.game.time
+            self.dodge.direction = vec2(1, 0)
+            self.dodge.duration = 0.15
+            self.dodge.delay = 0.2
+            self.dodge_frames = []
+
+        if self.dodge is not None and not self.done_recording:
+            self.dodge_frames.append(DodgeFrame(
+                self.game.time,
+                vec3(self.game.my_car.location),
+                vec3(self.game.my_car.velocity),
+                vec3(my_car.physics.rotation.pitch, my_car.physics.rotation.yaw, my_car.physics.rotation.roll),
+                vec3(self.game.my_car.angular_velocity)
+            ))
+            print(self.dodge_frames[-1])
 
         # Re-simulate the aerial every frame
         if self.aerial is not None and not self.aerial.finished:
@@ -229,7 +316,7 @@ class HeartOfGold(BaseAgent):
         # "Do a flip!"
         elif self.dodge is not None:
             if self.dodge.finished:
-                self.dodge = None
+                # self.dodge = None
                 return SimpleControllerState()
             self.dodge.step(self.game.time_delta)
             return self.dodge.controls

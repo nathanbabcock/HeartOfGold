@@ -192,7 +192,7 @@ class HeartOfGold(BaseAgent):
         self.intercept.purpose = 'position'
 
     def write_csv(self):
-        filename = 'analysis/data/frontflip.csv'
+        filename = 'analysis/data/diagonalflip.csv'
         # with open('C:/Users/nbabcock/AppData/Local/RLBotGUIX/MyBots/HeartOfGold/src/analysis/data/frontflip.csv', newline='') as csvfile:
         with open(os.path.join(os.path.dirname(__file__), filename), 'w', newline='') as csvfile:
             writer = csv.writer(csvfile, delimiter=',', quotechar='|', quoting=csv.QUOTE_MINIMAL)
@@ -203,7 +203,7 @@ class HeartOfGold(BaseAgent):
                 'car_pos_z',
                 'car_vel_x',
                 'car_vel_y',
-                'var_vel_z',
+                'car_vel_z',
                 'car_pitch',
                 'car_yaw',
                 'car_roll',
@@ -275,14 +275,14 @@ class HeartOfGold(BaseAgent):
         if self.dodge is None and not self.done_recording:
             self.dodge = Dodge(self.game.my_car)
             self.dodge_start_time = self.game.time
-            self.dodge.direction = vec2(1, 0)
+            self.dodge.direction = vec2(1, 1)
             self.dodge.duration = 0.15
             self.dodge.delay = 0.2
             self.dodge_frames = []
 
         if self.dodge is not None and not self.done_recording:
             self.dodge_frames.append(DodgeFrame(
-                self.game.time,
+                self.game.time - self.dodge_start_time,
                 vec3(self.game.my_car.location),
                 vec3(self.game.my_car.velocity),
                 vec3(my_car.physics.rotation.pitch, my_car.physics.rotation.yaw, my_car.physics.rotation.roll),

@@ -66,8 +66,8 @@ class HeartOfGold(BaseAgent):
         self.last_touch_location = Vec3(0, 0, 0)
 
     def reset_for_ground_shots(self):
-        self.initial_ball_location = Vector3(0, 2000, 100)
-        self.initial_ball_velocity = Vector3(randint(-1000, 1000), randint(-1000, 1000), randint(0, 750))
+        self.initial_ball_location = Vector3(2000, 2000, 100)
+        self.initial_ball_velocity = Vector3(randint(-1000, 1000), randint(-1000, 1000), 0)
         self.initial_car_location = Vector3(randint(-2000, 2000), 0, 0)
         self.initial_car_velocity = Vector3(0, 0, 0)
         self.not_hit_yet = True
@@ -107,65 +107,27 @@ class HeartOfGold(BaseAgent):
         self.set_game_state(game_state)
 
     def plan(self):
+        self.intercept = Intercept.calculate(self.game.my_car, self.game.ball, self.target)
+
         # Clean up old dodge
-        if self.dodge is not None:
-            if self.dodge.finished: self.dodge = None
-            else: return
-
-        # Simulate dodges whenever pointing at the intercept location
-        # pointing_at_intercept = self.intercept is not None and angle_between(self.intercept.location - self.game.my_car.location, self.game.my_car.forward()) < pi / 8
-        # about_to_trigger = self.best_dodge and norm(self.game.ball.location - self.game.my_car.location) < self.best_dodge.trigger_distance + 400
-        # if pointing_at_intercept or about_to_trigger:
-        #     if self.best_dodge is not None:
-        #         self.best_dodge.error = simulate_dodge(self.best_dodge, self.game.my_car, self.game.ball, self.target, self.intercept.location)
-        #         print(f'best dodge error, {norm(self.best_dodge.error)}')
-        #         self.best_dodge_sims += 1
-        #     alt_best_dodge = get_dodge(self, self.game.my_car, self.game.ball, self.target)
-        #     if self.best_dodge is None or (alt_best_dodge is not None and norm(alt_best_dodge.error) < norm(self.best_dodge.error)):
-        #         # print('Replacing old best dodge with a better one')
-        #         self.best_dodge = alt_best_dodge
-        #         self.best_dodge_start_dist = norm(self.intercept.location - self.game.my_car.location)
-        # # If no longer pointing towards our target, abandon all previous plans of dodging
-        # else:
-        #     if self.best_dodge_sims > 0: print(f'Abandoning a dodge after {self.best_dodge_sims} trials')
-        #     # print('intercept', self.intercept is None)
-        #     self.best_dodge = None
-        #     self.best_dodge_sims = 0
-        #     self.best_dodge_start_dist = 0
-
-        # Commit to a pre-simulated dodge once we hit the trigger dist
-        # if self.best_dodge is not None and norm(self.intercept.location - self.game.my_car.location) <= self.best_dodge.trigger_distance:
-        #     print(f'Committing to dodge after {self.best_dodge_sims} trials')
-        #     print(f'Trigger dist = {self.best_dodge.trigger_distance}')
-        #     # print(f'Trigger dist = {self.best_dodge.trigger_distance}')
-        #     # print(f'Trigger distance: {self.best_dodge.trigger_distance}')
-        #     # print(f'Intercept location: {self.intercept.location}')
-        #     # print(f'My location: {self.game.my_car.location}')
-        #     self.dodge = self.best_dodge
-        #     self.best_dodge = None
-        #     self.best_dodge_sims = 0
-        #     self.best_dodge_start_dist = 0
-
-        # if norm(self.game.my_car.location - self.game.ball.location) < norm(self.game.my_car.velocity):
-        #     self.dodge = get_dodge(self, self.game.my_car, self.game.ball, self.target)#random_dodge(self.game.my_car)
-        #     if self.dodge is not None: return
+        # if self.dodge is not None:
+        #     if self.dodge.finished: self.dodge = None
+        #     else: return
 
         # Calculate new intercept
-        not_repositioning = True # self.intercept is None or self.intercept.purpose != 'position'
-        not_ahead_of_ball = norm(self.game.my_car.location - self.target) > norm(self.game.ball.location - self.target)
-        on_ground = self.game.my_car.location[2] < 18
-        about_to_commit = False # self.intercept and self.intercept.dodge and self.game.time >= self.intercept.jump_time
-        if on_ground and not_repositioning and not_ahead_of_ball and not about_to_commit:
-            self.intercept = Intercept.calculate(self.game.my_car, self.game.ball, self.target)
-            if self.intercept is not None: return
+        # not_ahead_of_ball = norm(self.game.my_car.location - self.target) > norm(self.game.ball.location - self.target)
+        # on_ground = self.game.my_car.location[2] < 18
+        # if on_ground and not_ahead_of_ball:
+        #     self.intercept = Intercept.calculate(self.game.my_car, self.game.ball, self.target)
+        #     if self.intercept is not None: return
 
-        # Otherwise, try to get in position
-        waypoint = vec3(self.game.ball.location)
-        waypoint[1] -= 2500
-        waypoint[2] = 0
-        self.intercept = Intercept(waypoint)
-        self.intercept.boost = False
-        self.intercept.purpose = 'position'
+        # # Otherwise, try to get in position
+        # waypoint = vec3(self.game.ball.location)
+        # waypoint[1] -= 2500
+        # waypoint[2] = 0
+        # self.intercept = Intercept(waypoint)
+        # self.intercept.boost = False
+        # self.intercept.purpose = 'position'
 
     def get_output(self, packet: GameTickPacket) -> SimpleControllerState:
         # Record start time

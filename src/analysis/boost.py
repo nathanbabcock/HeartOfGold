@@ -42,6 +42,14 @@ class BoostAnalysis():
                 closest = frame
         return closest.copy()
 
+    # TODO obvious repitition with above, could probably be generalized later
+    def get_frame_by_time(self, time: float) -> ThrottleFrame:
+        closest = None
+        for frame in self.frames:
+            if closest == None or abs(frame.time - time) < abs(closest.time - time):
+                closest = frame
+        return closest.copy()
+
     def get_frame_by_error(self, error_func, start_index = 0):
         # print('get_frame_by_error')
         closest = None
@@ -78,6 +86,23 @@ class BoostAnalysis():
             dist_left = end_dist - end.distance
             end.time += dist_left / end.speed
             end.distance = end_dist
+
+        return ThrottleFrame(end.time - start.time, end.distance - start.distance, end.speed)
+
+    def travel_time(self, time: float, initial_speed: float = 0):
+        start = self.get_frame_by_speed(initial_speed)
+        end_time = start.time + time
+        end = self.get_frame_by_time(end_time)
+
+        # Handle speeds greater than than max boost (e.g. boost, without boost, while supersonic)
+        if initial_speed > end.speed:
+            end.speed = initial_speed
+
+        # Interpolate any remaining distance using constant velocity
+        if end_time > end.time:
+            time_left = end_time - end.time
+            end.distance += time_left * end.speed
+            end.time = end_time
 
         return ThrottleFrame(end.time - start.time, end.distance - start.distance, end.speed)
 

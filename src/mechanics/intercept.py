@@ -7,7 +7,7 @@ from rlbot.agents.base_agent import SimpleControllerState
 from rlbot.utils.game_state_util import CarState
 from util.drive import steer_toward_target
 from util.vec import Vec3
-from util.rlutilities import to_vec3, rotation_to_euler
+from util.rlutilities import to_vec3, rotation_to_euler, closest_point_on_obb
 from math import pi
 
 def get_car_front_center(car: Car):
@@ -96,7 +96,7 @@ class Intercept():
         return controls
 
     @staticmethod
-    def calculate(car: Car, ball: Ball, target: vec3, ball_predictions = None):
+    def calculate_old(car: Car, ball: Ball, target: vec3, ball_predictions = None):
         # Init vars
         fake_car = Car(car)
         b = Ball(ball)
@@ -219,4 +219,61 @@ class Intercept():
         # if not reachable:
         #     return None
 
+        return intercept
+
+    @staticmethod
+    def calculate(car: Car, ball: Ball, target: vec3, ball_predictions = None):
+        # Init vars
+        b = Ball(ball)
+        dt = 1.0 / 60.0
+
+        # Generate predictions of ball path
+        if ball_predictions is None:
+            ball_predictions = [vec3(b.location)]
+            for i in range(60*5):
+                b.step(dt)
+                ball_predictions.append(vec3(b.location))
+
+        # Gradually converge on ball location by aiming at a location, checking time to that location,
+        # and then aiming at the ball's NEW position. Guaranteed to converge (typically in <10 iterations)
+        # unless the ball is moving away from the car faster than the car's max boost speed
+        intercept = Intercept(b.location)
+        intercept.purpose = 'ball'
+        intercept.boost = True
+        intercept_ball_position = vec3(b.location)
+        i = 0
+        max_tries = 100
+        analyzer = BoostAnalysis() if intercept.boost else ThrottleAnalysis()
+        while i < max_tries:
+            fake_car = Car(car)
+            direction = normalize(intercept.location - car.location)
+            
+            for t in range(60*5):
+                # Step car location with throttle/boost analysis data
+                # Not super efficient but POITROAE
+                frame = analyzer.travel_time(dt, norm(fake_car.velocity))
+                # print('in 1 frame I travel', frame.time, frame.distance, frame.speed)
+                fake_car.location += direction * frame.distance
+                fake_car.velocity = direction * frame.speed
+                fake_car.time += dt
+                ball_location = ball_predictions[t]
+
+                # Check for collision
+                p = closest_point_on_obb(fake_car.hitbox(), ball_location)
+                if norm(p - ball_location) < ball.collision_radius:
+                    print('collision!')
+                    direction_vector = fake_car.hitbox().center - p
+                    print('direction vector', direction_vector)
+                    intercept_ball_position = ball_location
+                    intercept.time = t
+                    return intercept
+
+                # Check for arrival
+                if norm(fake_car.location - intercept.location) < ball.collision_radius / 2:
+                    intercept.location = ball_location
+                    break
+            i += 1
+
+        if i >= max_tries:
+            print(f'Warning: max tries ({max_tries}) exceeded for calculating intercept')
         return intercept

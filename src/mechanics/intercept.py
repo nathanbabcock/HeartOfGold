@@ -8,7 +8,7 @@ from rlbot.utils.game_state_util import CarState
 from util.drive import steer_toward_target
 from util.vec import Vec3
 from util.rlutilities import to_vec3, rotation_to_euler, closest_point_on_obb
-from math import pi
+from math import pi, atan, atan2, degrees
 
 def get_car_front_center(car: Car):
     return car.location + normalize(car.forward()) * car.hitbox().half_width[0] + normalize(car.up()) * car.hitbox().half_width[2]
@@ -241,12 +241,14 @@ class Intercept():
         intercept.purpose = 'ball'
         intercept.boost = True
         intercept_ball_position = vec3(b.location)
+        collision_achieved = False
         i = 0
         max_tries = 100
         analyzer = BoostAnalysis() if intercept.boost else ThrottleAnalysis()
         while i < max_tries:
             fake_car = Car(car)
             direction = normalize(intercept.location - car.location)
+            fake_car.rotation = look_at(direction, fake_car.up())
             
             for t in range(60*5):
                 # Step car location with throttle/boost analysis data
@@ -261,12 +263,27 @@ class Intercept():
                 # Check for collision
                 p = closest_point_on_obb(fake_car.hitbox(), ball_location)
                 if norm(p - ball_location) < ball.collision_radius:
-                    print('collision!')
-                    direction_vector = fake_car.hitbox().center - p
-                    print('direction vector', direction_vector)
+                    direction_vector = p - fake_car.hitbox().center
+                    direction_vector[2] = 0
+                    target_direction_vector = target - ball_location
+                    target_direction_vector[2] = 0
                     intercept_ball_position = ball_location
-                    intercept.time = t
+                    direction = atan2(direction_vector[1], direction_vector[0])
+                    ideal_direction = atan2(target_direction_vector[1], target_direction_vector[0])
+                    horizontal_error = ideal_direction - direction
+
+                    intercept.location = vec3(ball_location)
+                    intercept.time = fake_car.time
                     return intercept
+
+                    # if abs(horizontal_error) < pi / 10:
+                    #     return intercept
+
+                    # # Now descend the hit direction gradient
+                    # if last_horizontal_error is None:
+                    #     last_horizontal_error = horizontal_error
+                    #     last_horizontal_offset = 0
+                    #     horizontal_offset = ball.collision_radius / 2
 
                 # Check for arrival
                 if norm(fake_car.location - intercept.location) < ball.collision_radius / 2:

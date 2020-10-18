@@ -66,9 +66,9 @@ class HeartOfGold(BaseAgent):
         self.last_touch_location = Vec3(0, 0, 0)
 
     def reset_for_ground_shots(self):
-        self.initial_ball_location = Vector3(2000, 2000, 100)
-        self.initial_ball_velocity = Vector3(randint(-1000, 1000), randint(-1000, 1000), 0)
-        self.initial_car_location = Vector3(randint(-2000, 2000), 0, 0)
+        self.initial_ball_location = Vector3(0, 2000, 100)
+        self.initial_ball_velocity = Vector3(randint(-800, 800), randint(-800, 800), 0)
+        self.initial_car_location = Vector3(randint(-800, 800), 0, 0)
         self.initial_car_velocity = Vector3(0, 0, 0)
         self.not_hit_yet = True
         self.ball_predictions = []

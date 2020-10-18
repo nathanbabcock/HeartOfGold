@@ -229,7 +229,7 @@ class Intercept():
 
         # Generate predictions of ball path
         if ball_predictions is None:
-            ball_predictions = [vec3(b.location)]
+            ball_predictions = []
             for i in range(60*5):
                 b.step(dt)
                 ball_predictions.append(vec3(b.location))
@@ -242,10 +242,13 @@ class Intercept():
         intercept.boost = True
         intercept_ball_position = vec3(b.location)
         collision_achieved = False
+        last_horizontal_error = None
+        last_horizontal_offset = None
         i = 0
-        max_tries = 100
+        max_tries = 101
         analyzer = BoostAnalysis() if intercept.boost else ThrottleAnalysis()
         while i < max_tries:
+            i += 1
             fake_car = Car(car)
             direction = normalize(intercept.location - car.location)
             fake_car.rotation = look_at(direction, fake_car.up())
@@ -262,34 +265,78 @@ class Intercept():
 
                 # Check for collision
                 p = closest_point_on_obb(fake_car.hitbox(), ball_location)
-                if norm(p - ball_location) < ball.collision_radius:
-                    direction_vector = p - fake_car.hitbox().center
+                if norm(p - ball_location) <= ball.collision_radius:
+                    direction_vector = p - (fake_car.location - normalize(fake_car.forward()) * 13.88) # octane center of mass
                     direction_vector[2] = 0
                     target_direction_vector = target - ball_location
                     target_direction_vector[2] = 0
                     intercept_ball_position = ball_location
                     direction = atan2(direction_vector[1], direction_vector[0])
                     ideal_direction = atan2(target_direction_vector[1], target_direction_vector[0])
-                    horizontal_error = ideal_direction - direction
+                    horizontal_error = direction - ideal_direction
 
-                    intercept.location = vec3(ball_location)
-                    intercept.time = fake_car.time
-                    return intercept
+                    # intercept.location = vec3(ball_location)
+                    # intercept.time = fake_car.time
+                    # return intercept
 
-                    # if abs(horizontal_error) < pi / 10:
-                    #     return intercept
+                    # Now descend the hit direction gradient
+                    # Kick off the gradient descent with an arbitrary seed value
+                    if last_horizontal_error is None:
+                        last_horizontal_error = horizontal_error
+                        last_horizontal_offset = 0
+                        if horizontal_error > 0:
+                            horizontal_offset = 25
+                        else:
+                            horizontal_offset = 25
+                        intercept.location = ball_location - normalize(fake_car.left()) * horizontal_offset
+                        break
 
-                    # # Now descend the hit direction gradient
-                    # if last_horizontal_error is None:
-                    #     last_horizontal_error = horizontal_error
-                    #     last_horizontal_offset = 0
-                    #     horizontal_offset = ball.collision_radius / 2
+                    # Recursive case of gradient descent
+                    if horizontal_offset == last_horizontal_offset:
+                        gradient = 0
+                    else:
+                        gradient = (horizontal_error - last_horizontal_error) / (horizontal_offset - last_horizontal_offset)
+
+                    if gradient == 0:
+                        predicted_horizontal_offset = horizontal_offset
+                    else:
+                        predicted_horizontal_offset = horizontal_offset - horizontal_error / gradient
+
+                    # Base case (convergence)
+                    if abs(gradient) < 0.0005:
+                        print(f'convergence in {i} iterations')
+                        print(f'gradient = {gradient}')
+                        print(f'last_horizontal_offset = {last_horizontal_offset}')
+                        print(f'direction = {degrees(direction)}')
+                        print(f'ideal direction = {degrees(ideal_direction)}')
+                        print(f'target = {target}')
+                        print(f'ball_location = {ball_location}')
+                        return intercept
+
+                    # Edge case exit: offset maxed out
+                    max_horizontal_offset = car.hitbox().half_width[1] + ball.collision_radius
+                    if predicted_horizontal_offset > max_horizontal_offset:
+                        predicted_horizontal_offset = max_horizontal_offset
+                    elif predicted_horizontal_offset < -max_horizontal_offset:
+                        predicted_horizontal_offset = - max_horizontal_offset
+                    last_horizontal_offset = horizontal_offset
+                    last_horizontal_error = horizontal_error
+                    horizontal_offset = predicted_horizontal_offset
+
+                    # Return the latest intercept location and continue descending the gradient
+                    intercept.location = ball_location - normalize(fake_car.left()) * predicted_horizontal_offset
+                    print(f'iteration {i}')
+                    print(f'gradient = {gradient}')
+                    print(f'horizontal_offset = {horizontal_offset}')
+                    print(f'horizontal_error = {degrees(horizontal_error)}')
+                    # print(f'ideal direction = {degrees(ideal_direction)}')
+                    break
+
 
                 # Check for arrival
                 if norm(fake_car.location - intercept.location) < ball.collision_radius / 2:
                     intercept.location = ball_location
                     break
-            i += 1
 
         if i >= max_tries:
             print(f'Warning: max tries ({max_tries}) exceeded for calculating intercept')

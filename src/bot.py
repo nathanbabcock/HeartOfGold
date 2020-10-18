@@ -67,6 +67,7 @@ class HeartOfGold(BaseAgent):
 
     def reset_for_ground_shots(self):
         self.initial_ball_location = Vector3(0, 2000, 100)
+        # self.initial_ball_velocity = Vector3(randint(-800, 800), randint(-800, 800), 0)
         self.initial_ball_velocity = Vector3(randint(-800, 800), randint(-800, 800), 0)
         self.initial_car_location = Vector3(randint(-800, 800), 0, 0)
         self.initial_car_velocity = Vector3(0, 0, 0)

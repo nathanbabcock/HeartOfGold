@@ -64,6 +64,7 @@ class HeartOfGold(BaseAgent):
         self.speed_estimate = None
 
         self.dodge_start_time = None
+        self.start_time = None
         self.done_recording = False
 
     def initialize_agent(self):
@@ -92,12 +93,13 @@ class HeartOfGold(BaseAgent):
     def reset_for_data_collection(self):
         self.initial_ball_location = Vector3(2000, 2000, 100)
         self.initial_ball_velocity = Vector3(0, 0, 0)
-        self.initial_car_location = Vector3(0, 0, 0)
-        self.initial_car_velocity = Vector3(0, 0, 0)
+        self.initial_car_location = Vector3(0, 4000, 0)
+        self.initial_car_velocity = Vector3(0, 2500, 0)
         self.not_hit_yet = True
         self.ball_predictions = []
         self.last_dist = None
         self.last_touch_location = Vec3(0, 0, 0)
+        self.start_time = self.game.time
 
     def reset_gamestate(self):
         print('> reset_gamestate()')
@@ -124,7 +126,7 @@ class HeartOfGold(BaseAgent):
 
         # Set gamestate
         car_state = CarState(boost_amount=100, 
-                     physics=Physics(location=self.initial_car_location, velocity=self.initial_car_velocity, rotation=Rotator(0,0,0),
+                     physics=Physics(location=self.initial_car_location, velocity=self.initial_car_velocity, rotation=Rotator(0,pi/2,0),
                      angular_velocity=Vector3(0, 0, 0)))
         ball_state = BallState(Physics(location=self.initial_ball_location, velocity=self.initial_ball_velocity, rotation=Rotator(0, 0, 0), angular_velocity=Vector3(0, 0, 0)))
         game_state = GameState(ball=ball_state, cars={self.index: car_state})
@@ -192,7 +194,7 @@ class HeartOfGold(BaseAgent):
         self.intercept.purpose = 'position'
 
     def write_csv(self):
-        filename = 'analysis/data/diagonalflip.csv'
+        filename = 'analysis/data/brake-reverse.csv'
         # with open('C:/Users/nbabcock/AppData/Local/RLBotGUIX/MyBots/HeartOfGold/src/analysis/data/frontflip.csv', newline='') as csvfile:
         with open(os.path.join(os.path.dirname(__file__), filename), 'w', newline='') as csvfile:
             writer = csv.writer(csvfile, delimiter=',', quotechar='|', quoting=csv.QUOTE_MINIMAL)
@@ -267,17 +269,18 @@ class HeartOfGold(BaseAgent):
         # Recalculate intercept every frame
         # self.plan()
 
-        if self.dodge_start_time is not None and self.game.time > self.dodge_start_time + 3.0:
+        if self.start_time is not None and self.game.time > self.start_time + 8.0:
             self.write_csv()
             self.dodge_start_time = None
             self.done_recording = True
 
         if self.dodge is None and not self.done_recording:
-            self.dodge = Dodge(self.game.my_car)
+            self.dodge = True #Dodge(self.game.my_car)
             self.dodge_start_time = self.game.time
-            self.dodge.direction = vec2(1, 1)
-            self.dodge.duration = 0.15
-            self.dodge.delay = 0.2
+            self.start_time = self.game.time
+            # self.dodge.direction = vec2(1, 1)
+            # self.dodge.duration = 0.15
+            # self.dodge.delay = 0.2
             self.dodge_frames = []
 
         if self.dodge is not None and not self.done_recording:
@@ -314,12 +317,12 @@ class HeartOfGold(BaseAgent):
             self.reset_gamestate()
             return SimpleControllerState()
         # "Do a flip!"
-        elif self.dodge is not None:
-            if self.dodge.finished:
-                # self.dodge = None
-                return SimpleControllerState()
-            self.dodge.step(self.game.time_delta)
-            return self.dodge.controls
+        # elif self.dodge is not None:
+        #     if self.dodge.finished:
+        #         # self.dodge = None
+        #         return SimpleControllerState()
+        #     self.dodge.step(self.game.time_delta)
+        #     return self.dodge.controls
         # Just do an aerial :4head:
         elif self.aerial is not None:
             aerial_step(self.aerial, Car(self.game.my_car), self.rotation_input, self.game.time_delta)
@@ -336,5 +339,9 @@ class HeartOfGold(BaseAgent):
                 self.dodge.step(self.game.time_delta)
                 return self.dodge.controls
             return self.intercept.get_controls(my_car, self.game.my_car) #drive_at(self, my_car, self.intercept.location)
+        else:
+            controls = SimpleControllerState()
+            controls.throttle = -1
+            return controls
 
         return SimpleControllerState()

@@ -7,7 +7,6 @@ from math import pi, sqrt, inf, cos, sin, tan, atan2
 from random import randint
 import time
 import random
-# random.seed(42)
 
 from util.ball_prediction_analysis import find_slice_at_time
 from util.boost_pad_tracker import BoostPadTracker
@@ -24,14 +23,13 @@ from mechanics.drive import *
 from mechanics.intercept import *
 from mechanics.dodge import *
 from mechanics.aerial import *
-# from mechanics.path import *
 
 from analysis.throttle import *
 
 import csv
 import os
 
-class DodgeFrame:
+class DataFrame:
     def __init__(self, time, car_pos, car_vel, car_rotator, car_angvel):
         self.time = time
         self.car_pos = car_pos
@@ -46,24 +44,14 @@ class HeartOfGold(BaseAgent):
         self.ball_predictions = []
         self.not_hit_yet = True
         self.game = None
-        self.aerial = None
         self.timer = 0.0
-        self.action = None
 
-        self.intercept = None
-        self.target = None
+        self.aerial = None
 
         self.dodge = None
         self.dodge_started = False
-        # self.dodge_error = None
-        self.best_dodge = None
-        self.best_dodge_sims = 0
-        self.best_dodge_start_dist = 0
-
-        self.time_estimate = None
-        self.speed_estimate = None
-
         self.dodge_start_time = None
+
         self.start_time = None
         self.done_recording = False
 
@@ -112,70 +100,8 @@ class HeartOfGold(BaseAgent):
         game_state = GameState(ball=ball_state, cars={self.index: car_state})
         self.set_game_state(game_state)
 
-    def plan(self):
-        # Clean up old dodge
-        if self.dodge is not None:
-            if self.dodge.finished: self.dodge = None
-            else: return
-
-        # Simulate dodges whenever pointing at the intercept location
-        # pointing_at_intercept = self.intercept is not None and angle_between(self.intercept.location - self.game.my_car.location, self.game.my_car.forward()) < pi / 8
-        # about_to_trigger = self.best_dodge and norm(self.game.ball.location - self.game.my_car.location) < self.best_dodge.trigger_distance + 400
-        # if pointing_at_intercept or about_to_trigger:
-        #     if self.best_dodge is not None:
-        #         self.best_dodge.error = simulate_dodge(self.best_dodge, self.game.my_car, self.game.ball, self.target, self.intercept.location)
-        #         print(f'best dodge error, {norm(self.best_dodge.error)}')
-        #         self.best_dodge_sims += 1
-        #     alt_best_dodge = get_dodge(self, self.game.my_car, self.game.ball, self.target)
-        #     if self.best_dodge is None or (alt_best_dodge is not None and norm(alt_best_dodge.error) < norm(self.best_dodge.error)):
-        #         # print('Replacing old best dodge with a better one')
-        #         self.best_dodge = alt_best_dodge
-        #         self.best_dodge_start_dist = norm(self.intercept.location - self.game.my_car.location)
-        # # If no longer pointing towards our target, abandon all previous plans of dodging
-        # else:
-        #     if self.best_dodge_sims > 0: print(f'Abandoning a dodge after {self.best_dodge_sims} trials')
-        #     # print('intercept', self.intercept is None)
-        #     self.best_dodge = None
-        #     self.best_dodge_sims = 0
-        #     self.best_dodge_start_dist = 0
-
-        # Commit to a pre-simulated dodge once we hit the trigger dist
-        # if self.best_dodge is not None and norm(self.intercept.location - self.game.my_car.location) <= self.best_dodge.trigger_distance:
-        #     print(f'Committing to dodge after {self.best_dodge_sims} trials')
-        #     print(f'Trigger dist = {self.best_dodge.trigger_distance}')
-        #     # print(f'Trigger dist = {self.best_dodge.trigger_distance}')
-        #     # print(f'Trigger distance: {self.best_dodge.trigger_distance}')
-        #     # print(f'Intercept location: {self.intercept.location}')
-        #     # print(f'My location: {self.game.my_car.location}')
-        #     self.dodge = self.best_dodge
-        #     self.best_dodge = None
-        #     self.best_dodge_sims = 0
-        #     self.best_dodge_start_dist = 0
-
-        # if norm(self.game.my_car.location - self.game.ball.location) < norm(self.game.my_car.velocity):
-        #     self.dodge = get_dodge(self, self.game.my_car, self.game.ball, self.target)#random_dodge(self.game.my_car)
-        #     if self.dodge is not None: return
-
-        # Calculate new intercept
-        not_repositioning = True # self.intercept is None or self.intercept.purpose != 'position'
-        not_ahead_of_ball = norm(self.game.my_car.location - self.target) > norm(self.game.ball.location - self.target)
-        on_ground = self.game.my_car.location[2] < 18
-        about_to_commit = False # self.intercept and self.intercept.dodge and self.game.time >= self.intercept.jump_time
-        if on_ground and not_repositioning and not_ahead_of_ball and not about_to_commit:
-            self.intercept = Intercept.calculate(self.game.my_car, self.game.ball, self.target)
-            if self.intercept is not None: return
-
-        # Otherwise, try to get in position
-        waypoint = vec3(self.game.ball.location)
-        waypoint[1] -= 2500
-        waypoint[2] = 0
-        self.intercept = Intercept(waypoint)
-        self.intercept.boost = False
-        self.intercept.purpose = 'position'
-
     def write_csv(self):
         filename = 'analysis/data/coast-reverse.csv'
-        # with open('C:/Users/nbabcock/AppData/Local/RLBotGUIX/MyBots/HeartOfGold/src/analysis/data/frontflip.csv', newline='') as csvfile:
         with open(os.path.join(os.path.dirname(__file__), filename), 'w', newline='') as csvfile:
             writer = csv.writer(csvfile, delimiter=',', quotechar='|', quoting=csv.QUOTE_MINIMAL)
             writer.writerow([
@@ -209,7 +135,6 @@ class HeartOfGold(BaseAgent):
                     row.car_angvel[1],
                     row.car_angvel[2]
                 ])
-                #self.frames.append(ThrottleFrame(row['time'], row['distance'], row['speed']))
             print(f'Wrote {len(self.dodge_frames)} frames to {filename}')
 
     def get_output(self, packet: GameTickPacket) -> SimpleControllerState:
@@ -261,7 +186,7 @@ class HeartOfGold(BaseAgent):
             self.dodge_frames = []
 
         if self.dodge is not None and not self.done_recording:
-            self.dodge_frames.append(DodgeFrame(
+            self.dodge_frames.append(DataFrame(
                 self.game.time - self.dodge_start_time,
                 vec3(self.game.my_car.location),
                 vec3(self.game.my_car.velocity),
@@ -274,9 +199,6 @@ class HeartOfGold(BaseAgent):
         if self.aerial is not None and not self.aerial.finished:
             simulate_aerial(self)
             simulate_alternate_aerials(self)
-
-        # Update dodge (init or clean up old)
-        # try_init_dodge(self)
 
         # Rendering
         if len(self.ball_predictions) > 2:

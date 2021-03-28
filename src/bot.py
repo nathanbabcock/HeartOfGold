@@ -73,7 +73,7 @@ class HeartOfGold(BaseAgent):
     def reset_for_data_collection(self):
         self.initial_ball_location = Vector3(2000, 2000, 100)
         self.initial_ball_velocity = Vector3(0, 0, 0)
-        self.initial_car_location = Vector3(0, -4000, 0)
+        self.initial_car_location = Vector3(0, 4000, 0)
         self.initial_car_velocity = Vector3(0, -2500, 0)
         self.not_hit_yet = True
         self.ball_predictions = []
@@ -174,7 +174,7 @@ class HeartOfGold(BaseAgent):
         self.intercept.purpose = 'position'
 
     def write_csv(self):
-        filename = 'analysis/data/boost.csv'
+        filename = 'analysis/data/coast-reverse.csv'
         # with open('C:/Users/nbabcock/AppData/Local/RLBotGUIX/MyBots/HeartOfGold/src/analysis/data/frontflip.csv', newline='') as csvfile:
         with open(os.path.join(os.path.dirname(__file__), filename), 'w', newline='') as csvfile:
             writer = csv.writer(csvfile, delimiter=',', quotechar='|', quoting=csv.QUOTE_MINIMAL)
@@ -246,7 +246,7 @@ class HeartOfGold(BaseAgent):
             print(f'> Car hit ball')
             self.not_hit_yet = False
 
-        if self.start_time is not None and self.game.time > self.start_time + 4.0:
+        if self.start_time is not None and self.game.time > self.start_time + 6.0 and not self.done_recording:
             self.write_csv()
             self.dodge_start_time = None
             self.done_recording = True
@@ -318,8 +318,8 @@ class HeartOfGold(BaseAgent):
             return self.intercept.get_controls(my_car, self.game.my_car) #drive_at(self, my_car, self.intercept.location)
         else:
             controls = SimpleControllerState()
-            controls.throttle = 1
-            controls.boost = True
+            # controls.throttle = 1
+            # controls.boost = True
             return controls
 
         return SimpleControllerState()

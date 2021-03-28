@@ -174,7 +174,7 @@ class HeartOfGold(BaseAgent):
         self.intercept.purpose = 'position'
 
     def write_csv(self):
-        filename = 'analysis/data/throttle.csv'
+        filename = 'analysis/data/boost.csv'
         # with open('C:/Users/nbabcock/AppData/Local/RLBotGUIX/MyBots/HeartOfGold/src/analysis/data/frontflip.csv', newline='') as csvfile:
         with open(os.path.join(os.path.dirname(__file__), filename), 'w', newline='') as csvfile:
             writer = csv.writer(csvfile, delimiter=',', quotechar='|', quoting=csv.QUOTE_MINIMAL)
@@ -246,7 +246,7 @@ class HeartOfGold(BaseAgent):
             print(f'> Car hit ball')
             self.not_hit_yet = False
 
-        if self.start_time is not None and self.game.time > self.start_time + 8.0:
+        if self.start_time is not None and self.game.time > self.start_time + 4.0:
             self.write_csv()
             self.dodge_start_time = None
             self.done_recording = True
@@ -319,6 +319,7 @@ class HeartOfGold(BaseAgent):
         else:
             controls = SimpleControllerState()
             controls.throttle = 1
+            controls.boost = True
             return controls
 
         return SimpleControllerState()

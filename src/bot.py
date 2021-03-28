@@ -70,31 +70,11 @@ class HeartOfGold(BaseAgent):
     def initialize_agent(self):
         print('> Alphabot: I N I T I A L I Z E D')
 
-    def reset_for_aerial(self):
-        self.initial_ball_location = Vector3(0, 2000, 100)
-        self.initial_ball_velocity = Vector3(randint(-250, 250), randint(-250, 250), 650 * 2)
-        self.initial_car_location = Vector3(randint(-2000, 2000), 0, 0)
-        self.initial_car_velocity = Vector3(0, 0, 0)
-        self.not_hit_yet = True
-        self.ball_predictions = []
-        self.last_dist = None
-        self.last_touch_location = Vec3(0, 0, 0)
-
-    def reset_for_ground_shots(self):
-        self.initial_ball_location = Vector3(0, 2000, 100)
-        self.initial_ball_velocity = Vector3(randint(-1000, 1000), randint(-1000, 1000), randint(0, 750))
-        self.initial_car_location = Vector3(randint(-2000, 2000), 0, 0)
-        self.initial_car_velocity = Vector3(0, 0, 0)
-        self.not_hit_yet = True
-        self.ball_predictions = []
-        self.last_dist = None
-        self.last_touch_location = Vec3(0, 0, 0)
-
     def reset_for_data_collection(self):
         self.initial_ball_location = Vector3(2000, 2000, 100)
         self.initial_ball_velocity = Vector3(0, 0, 0)
-        self.initial_car_location = Vector3(0, 4000, 0)
-        self.initial_car_velocity = Vector3(0, 2500, 0)
+        self.initial_car_location = Vector3(0, -4000, 0)
+        self.initial_car_velocity = Vector3(0, -2500, 0)
         self.not_hit_yet = True
         self.ball_predictions = []
         self.last_dist = None
@@ -194,7 +174,7 @@ class HeartOfGold(BaseAgent):
         self.intercept.purpose = 'position'
 
     def write_csv(self):
-        filename = 'analysis/data/brake-reverse.csv'
+        filename = 'analysis/data/throttle.csv'
         # with open('C:/Users/nbabcock/AppData/Local/RLBotGUIX/MyBots/HeartOfGold/src/analysis/data/frontflip.csv', newline='') as csvfile:
         with open(os.path.join(os.path.dirname(__file__), filename), 'w', newline='') as csvfile:
             writer = csv.writer(csvfile, delimiter=',', quotechar='|', quoting=csv.QUOTE_MINIMAL)
@@ -265,9 +245,6 @@ class HeartOfGold(BaseAgent):
             self.last_touch_location = Vec3(packet.game_ball.latest_touch.hit_location)
             print(f'> Car hit ball')
             self.not_hit_yet = False
-
-        # Recalculate intercept every frame
-        # self.plan()
 
         if self.start_time is not None and self.game.time > self.start_time + 8.0:
             self.write_csv()
@@ -341,7 +318,7 @@ class HeartOfGold(BaseAgent):
             return self.intercept.get_controls(my_car, self.game.my_car) #drive_at(self, my_car, self.intercept.location)
         else:
             controls = SimpleControllerState()
-            controls.throttle = -1
+            controls.throttle = 1
             return controls
 
         return SimpleControllerState()

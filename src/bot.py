@@ -55,6 +55,7 @@ class HeartOfGold(BaseAgent):
         self.dodge_start_time = None
 
         self.start_time = None
+        self.start_recording = False
         self.done_recording = False
 
     def initialize_agent(self):
@@ -70,6 +71,7 @@ class HeartOfGold(BaseAgent):
         self.last_dist = None
         self.last_touch_location = Vec3(0, 0, 0)
         self.start_time = self.game.time
+        self.start_recording = False
 
     def reset_gamestate(self):
         print('> reset_gamestate()')
@@ -103,41 +105,41 @@ class HeartOfGold(BaseAgent):
         self.set_game_state(game_state)
 
     def write_csv(self):
-        filename = 'analysis/data/turn-throttle.csv'
+        filename = 'analysis/data/turn-right-throttle.csv'
         with open(os.path.join(os.path.dirname(__file__), filename), 'w', newline='') as csvfile:
             writer = csv.writer(csvfile, delimiter=',', quotechar='|', quoting=csv.QUOTE_MINIMAL)
             writer.writerow([
                 'time',
-                'car_pos_x',
-                'car_pos_y',
-                'car_pos_z',
-                'car_vel_x',
-                'car_vel_y',
-                'car_vel_z',
-                'car_speed',
-                'car_pitch',
-                'car_yaw',
-                'car_roll',
-                'car_angvel_x',
-                'car_angvel_y',
-                'car_angvel_z',
+                'pos_x',
+                'pos_y',
+                #'pos_z',
+                'vel_x',
+                'vel_y',
+                #'vel_z',
+                'speed',
+                #'pitch',
+                #'yaw',
+                #'roll',
+                #'angvel_x',
+                #'angvel_y',
+                #'angvel_z',
             ])
             for row in self.dodge_frames:
                 writer.writerow([
                     row.time,
                     row.car_pos[0],
                     row.car_pos[1],
-                    row.car_pos[2],
+                    # row.car_pos[2],
                     row.car_vel[0],
                     row.car_vel[1],
-                    row.car_vel[2],
+                    # row.car_vel[2],
                     row.car_speed,
-                    row.car_rotator[0],
-                    row.car_rotator[1],
-                    row.car_rotator[2],
-                    row.car_angvel[0],
-                    row.car_angvel[1],
-                    row.car_angvel[2]
+                    # row.car_rotator[0],
+                    # row.car_rotator[1],
+                    # row.car_rotator[2],
+                    # row.car_angvel[0],
+                    # row.car_angvel[1],
+                    # row.car_angvel[2]
                 ])
             print(f'Wrote {len(self.dodge_frames)} frames to {filename}')
 
@@ -169,18 +171,21 @@ class HeartOfGold(BaseAgent):
         # Update simulation
         self.game.read_game_information(packet, self.get_rigid_body_tick(), self.get_field_info())
 
+
+
         # Check for car hit ball
         if self.last_touch_location != packet.game_ball.latest_touch.hit_location:
             self.last_touch_location = Vec3(packet.game_ball.latest_touch.hit_location)
             print(f'> Car hit ball')
             self.not_hit_yet = False
 
-        if self.start_time is not None and self.game.time > self.start_time + 6.0 and not self.done_recording:
+        if self.dodge_start_time is not None and self.game.time > self.dodge_start_time + 6.0 and not self.done_recording:
             self.write_csv()
             self.dodge_start_time = None
             self.done_recording = True
 
-        if self.dodge is None and not self.done_recording:
+        if self.dodge is None and not self.done_recording and self.game.time > self.start_time + 1.0:
+            self.start_recording = True
             self.dodge = True #Dodge(self.game.my_car)
             self.dodge_start_time = self.game.time
             self.start_time = self.game.time
@@ -189,7 +194,7 @@ class HeartOfGold(BaseAgent):
             # self.dodge.delay = 0.2
             self.dodge_frames = []
 
-        if self.dodge is not None and not self.done_recording:
+        if self.start_recording and not self.done_recording:
             self.dodge_frames.append(DataFrame(
                 self.game.time - self.dodge_start_time,
                 vec3(self.game.my_car.location),
@@ -242,7 +247,7 @@ class HeartOfGold(BaseAgent):
                 self.dodge.step(self.game.time_delta)
                 return self.dodge.controls
             return self.intercept.get_controls(my_car, self.game.my_car) #drive_at(self, my_car, self.intercept.location)
-        else:
+        elif self.start_recording:
             controls = SimpleControllerState()
             controls.throttle = 1
             controls.steer = 1

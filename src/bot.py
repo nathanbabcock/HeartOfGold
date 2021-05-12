@@ -10,6 +10,24 @@ import time
 import csv
 import os
 
+OUTPUT_FILENAME = 'analysis/data/turn-left-boost.json'
+OUTPUT_FIELDS = [
+    'time',
+    'pos_x',
+    'pos_y',
+    'vel_x',
+    'vel_y',
+    'speed',
+    'yaw',
+]
+INPUT_CONTROLLER_STATE = SimpleControllerState(
+    throttle=1,
+    steer=-1,
+    boost=True
+)
+RECORD_DELAY = 1.0
+RECORD_DURATION = 6.0
+
 class HeartOfGold(BaseAgent):
     def __init__(self, name, team, index):
         super().__init__(name, team, index)
@@ -64,7 +82,7 @@ class HeartOfGold(BaseAgent):
         self.set_game_state(game_state)
 
     def write_json(self):
-        filename = 'analysis/data/turn-right-boost.json'
+        filename = OUTPUT_FILENAME
         import json
 
         data = {}
@@ -75,6 +93,7 @@ class HeartOfGold(BaseAgent):
             json.dump(data, outfile,  indent=2)
             print(f'Wrote {len(self.replay_frames)} frames to {filename}')
 
+    # @deprecated (format of self.replay_frames changed)
     def write_csv(self):
         filename = 'analysis/data/turn-right-boost.csv'
         with open(os.path.join(os.path.dirname(__file__), filename), 'w', newline='') as csvfile:
@@ -142,7 +161,7 @@ class HeartOfGold(BaseAgent):
         self.game.read_game_information(packet, self.get_rigid_body_tick(), self.get_field_info())
 
         # Start recording (after 1s delay)
-        if not self.start_recording and not self.done_recording and self.game.time > self.start_time + 1.0:
+        if not self.start_recording and not self.done_recording and self.game.time > self.start_time + RECORD_DELAY:
             self.start_recording = True
             self.record_start_time = self.game.time
             self.replay_frames = []
@@ -150,26 +169,27 @@ class HeartOfGold(BaseAgent):
         # Save each frame (including the first)
         if self.start_recording and not self.done_recording:
             t = self.game.time - self.record_start_time
-            self.replay_frames.append({
-                'time': t,
-                'pos_x': self.game.my_car.location[0],
-                'pos_y': self.game.my_car.location[1],
-                #'pos_z': self.game.my_car.location[2],
-                'vel_x': self.game.my_car.velocity[0],
-                'vel_y': self.game.my_car.velocity[1],
-                # 'vel_z': self.game.my_car.velocity[2],
-                'speed': veclen(self.game.my_car.velocity),
-                # 'pitch': my_car.physics.rotation.pitch,
-                # 'yaw': my_car.physics.rotation.yaw,
-                # 'roll': my_car.physics.rotation.roll,
-                # 'angvel_x': self.game.my_car.angular_velocity[0],
-                # 'angvel_y': self.game.my_car.angular_velocity[1],
-                # 'angvel_z': self.game.my_car.angular_velocity[2]
-            })
+            frame = {}
+            if 'time' in OUTPUT_FIELDS: frame['time'] = t
+            if 'pos_x' in OUTPUT_FIELDS: frame['pos_x'] = self.game.my_car.location[0]
+            if 'pos_y' in OUTPUT_FIELDS: frame['pos_y'] = self.game.my_car.location[1]
+            if 'pos_z' in OUTPUT_FIELDS: frame['pos_z'] = self.game.my_car.location[2]
+            if 'vel_x' in OUTPUT_FIELDS: frame['vel_x'] = self.game.my_car.velocity[0]
+            if 'vel_y' in OUTPUT_FIELDS: frame['vel_y'] = self.game.my_car.velocity[1]
+            if 'vel_z' in OUTPUT_FIELDS: frame['vel_z'] = self.game.my_car.velocity[2]
+            if 'speed' in OUTPUT_FIELDS: frame['speed'] = veclen(self.game.my_car.velocity)
+            if 'pitch' in OUTPUT_FIELDS: frame['pitch'] = my_car.physics.rotation.pitch
+            if 'yaw'  in OUTPUT_FIELDS: frame['yaw'] = my_car.physics.rotation.yaw
+            if 'roll' in OUTPUT_FIELDS: frame['roll'] = my_car.physics.rotation.roll
+            if 'angvel_x' in OUTPUT_FIELDS: frame['angvel_x'] = self.game.my_car.angular_velocity[0]
+            if 'angvel_y' in OUTPUT_FIELDS: frame['angvel_y'] = self.game.my_car.angular_velocity[1]
+            if 'angvel_z' in OUTPUT_FIELDS: frame['angvel_z'] = self.game.my_car.angular_velocity[2]
+
+            self.replay_frames.append(frame)
             print(f'Recorded frame t={t}')
 
         # Write output
-        if self.start_recording and self.game.time > self.record_start_time + 6.0 and not self.done_recording:
+        if self.start_recording and self.game.time > self.record_start_time + RECORD_DURATION and not self.done_recording:
             self.write_json()
             #self.write_csv()
             self.done_recording = True
@@ -179,10 +199,6 @@ class HeartOfGold(BaseAgent):
             self.reset_gamestate()
             return SimpleControllerState()
         elif self.start_recording:
-            controls = SimpleControllerState()
-            controls.throttle = 1
-            controls.steer = 1
-            controls.boost = True
-            return controls
+            return INPUT_CONTROLLER_STATE
         else:
             return SimpleControllerState()

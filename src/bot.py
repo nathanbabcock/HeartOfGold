@@ -29,15 +29,6 @@ from analysis.throttle import *
 import csv
 import os
 
-class DataFrame:
-    def __init__(self, time, car_pos, car_vel, car_rotator, car_angvel):
-        self.time = time
-        self.car_pos = car_pos
-        self.car_vel = car_vel
-        self.car_speed = veclen(car_vel)
-        self.car_rotator = car_rotator
-        self.car_angvel = car_angvel
-
 class HeartOfGold(BaseAgent):
     def __init__(self, name, team, index):
         super().__init__(name, team, index)
@@ -110,17 +101,7 @@ class HeartOfGold(BaseAgent):
 
         data = {}
         data['deltaTime'] = 0.008333333333333333
-        data['frames'] = []
-
-        for row in self.dodge_frames:
-            data['frames'].append({
-                'time': row.time,
-                'pos_x': row.car_pos[0],
-                'pos_y': row.car_pos[1],
-                'vel_x': row.car_vel[0],
-                'vel_y': row.car_vel[1],
-                'speed': row.car_speed,
-            })
+        data['frames'] = self.dodge_frames
 
         with open(os.path.join(os.path.dirname(__file__), filename), 'w') as outfile:
             json.dump(data, outfile,  indent=2)
@@ -216,63 +197,34 @@ class HeartOfGold(BaseAgent):
             self.dodge_frames = []
 
         if self.start_recording and not self.done_recording:
-            self.dodge_frames.append(DataFrame(
-                self.game.time - self.dodge_start_time,
-                vec3(self.game.my_car.location),
-                vec3(self.game.my_car.velocity),
-                vec3(my_car.physics.rotation.pitch, my_car.physics.rotation.yaw, my_car.physics.rotation.roll),
-                vec3(self.game.my_car.angular_velocity)
-            ))
+            self.dodge_frames.append({
+                'time': self.game.time - self.dodge_start_time,
+                'pos_x': self.game.my_car.location[0],
+                'pos_y': self.game.my_car.location[1],
+                #'pos_z': self.game.my_car.location[2],
+                'vel_x': self.game.my_car.velocity[0],
+                'vel_y': self.game.my_car.velocity[1],
+                # 'vel_z': self.game.my_car.velocity[2],
+                'speed': veclen(self.game.my_car.velocity),
+                # 'pitch': my_car.physics.rotation.pitch,
+                # 'yaw': my_car.physics.rotation.yaw,
+                # 'roll': my_car.physics.rotation.roll,
+                # 'angvel_x': self.game.my_car.angular_velocity[0],
+                # 'angvel_y': self.game.my_car.angular_velocity[1],
+                # 'angvel_z': self.game.my_car.angular_velocity[2]
+            })
             print(self.dodge_frames[-1])
 
-        # Re-simulate the aerial every frame
-        if self.aerial is not None and not self.aerial.finished:
-            simulate_aerial(self)
-            simulate_alternate_aerials(self)
-
-        # Rendering
-        if len(self.ball_predictions) > 2:
-            self.renderer.draw_polyline_3d(self.ball_predictions, self.renderer.red())
-        if self.aerial != None and self.aerial.target:
-            self.renderer.draw_rect_3d(self.aerial.target, 8, 8, True, self.renderer.green(), centered=True)
-            self.renderer.draw_line_3d(car_location, self.aerial.target, self.renderer.white())
-            self.renderer.draw_line_3d(vec3_to_Vec3(self.target), self.target + self.avg_aerial_error, self.renderer.cyan())
-        if self.intercept != None:
-            self.renderer.draw_rect_3d(self.intercept.location, 8, 8, True, self.renderer.green(), centered=True)
-        self.renderer.draw_rect_3d(vec3_to_Vec3(self.target), 8, 8, True, self.renderer.green(), centered=True)
-
+        
         # Controller state
         if reset:
             self.reset_gamestate()
             return SimpleControllerState()
-        # "Do a flip!"
-        # elif self.dodge is not None:
-        #     if self.dodge.finished:
-        #         # self.dodge = None
-        #         return SimpleControllerState()
-        #     self.dodge.step(self.game.time_delta)
-        #     return self.dodge.controls
-        # Just do an aerial :4head:
-        elif self.aerial is not None:
-            aerial_step(self.aerial, Car(self.game.my_car), self.rotation_input, self.game.time_delta)
-            return self.aerial.controls
-        # Just hit the ball :4head:
-        elif self.intercept is not None:
-            if self.intercept.dodge and abs(self.game.time - self.intercept.jump_time) <= self.game.time_delta:
-                print('im gonna nut')
-                self.dodge = Dodge(self.game.my_car)
-                self.dodge.duration = 0.2
-                self.dodge.preorientation = self.intercept.dodge_preorientation
-                self.dodge.delay = self.intercept.dodge_delay + 0.1
-                self.dodge.direction = self.intercept.dodge_direction
-                self.dodge.step(self.game.time_delta)
-                return self.dodge.controls
-            return self.intercept.get_controls(my_car, self.game.my_car) #drive_at(self, my_car, self.intercept.location)
         elif self.start_recording:
             controls = SimpleControllerState()
             controls.throttle = 1
             controls.steer = 1
             controls.boost = True
             return controls
-
-        return SimpleControllerState()
+        else:
+            return SimpleControllerState()

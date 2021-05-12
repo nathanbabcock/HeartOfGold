@@ -104,8 +104,30 @@ class HeartOfGold(BaseAgent):
         game_state = GameState(ball=ball_state, cars={self.index: car_state})
         self.set_game_state(game_state)
 
+    def write_json(self):
+        filename = 'analysis/data/turn-right-boost.json'
+        import json
+
+        data = {}
+        data['deltaTime'] = 0.008333333333333333
+        data['frames'] = []
+
+        for row in self.dodge_frames:
+            data['frames'].append({
+                'time': row.time,
+                'pos_x': row.car_pos[0],
+                'pos_y': row.car_pos[1],
+                'vel_x': row.car_vel[0],
+                'vel_y': row.car_vel[1],
+                'speed': row.car_speed,
+            })
+
+        with open(os.path.join(os.path.dirname(__file__), filename), 'w') as outfile:
+            json.dump(data, outfile,  indent=2)
+            print(f'Wrote {len(self.dodge_frames)} frames to {filename}')
+
     def write_csv(self):
-        filename = 'analysis/data/turn-right-throttle.csv'
+        filename = 'analysis/data/turn-right-boost.csv'
         with open(os.path.join(os.path.dirname(__file__), filename), 'w', newline='') as csvfile:
             writer = csv.writer(csvfile, delimiter=',', quotechar='|', quoting=csv.QUOTE_MINIMAL)
             writer.writerow([
@@ -171,8 +193,6 @@ class HeartOfGold(BaseAgent):
         # Update simulation
         self.game.read_game_information(packet, self.get_rigid_body_tick(), self.get_field_info())
 
-
-
         # Check for car hit ball
         if self.last_touch_location != packet.game_ball.latest_touch.hit_location:
             self.last_touch_location = Vec3(packet.game_ball.latest_touch.hit_location)
@@ -180,7 +200,8 @@ class HeartOfGold(BaseAgent):
             self.not_hit_yet = False
 
         if self.dodge_start_time is not None and self.game.time > self.dodge_start_time + 6.0 and not self.done_recording:
-            self.write_csv()
+            #self.write_csv()
+            self.write_json()
             self.dodge_start_time = None
             self.done_recording = True
 
@@ -251,7 +272,7 @@ class HeartOfGold(BaseAgent):
             controls = SimpleControllerState()
             controls.throttle = 1
             controls.steer = 1
-            # controls.boost = True
+            controls.boost = True
             return controls
 
         return SimpleControllerState()

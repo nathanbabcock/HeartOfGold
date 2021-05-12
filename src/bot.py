@@ -1,56 +1,28 @@
 from rlbot.agents.base_agent import BaseAgent, SimpleControllerState
-from rlbot.messages.flat.QuickChatSelection import QuickChatSelection
 from rlbot.utils.structures.game_data_struct import GameTickPacket
-from rlbot.utils.game_state_util import GameState, BallState, CarState, Physics, Vector3, Rotator, GameInfoState
-
-from math import pi, sqrt, inf, cos, sin, tan, atan2
-from random import randint
-import time
-import random
-
-from util.ball_prediction_analysis import find_slice_at_time
-from util.boost_pad_tracker import BoostPadTracker
-from util.drive import steer_toward_target
-from util.sequence import Sequence, ControlStep
+from rlbot.utils.game_state_util import GameState, BallState, CarState, Physics, Vector3, Rotator
+from rlutilities.simulation import Ball, Car, Game
+from rlutilities.linear_algebra import *
 from util.vec import Vec3
 from util.rlutilities import *
-
-from rlutilities.simulation import Ball, Car, Field, Game, Input
-from rlutilities.mechanics import Aerial
-from rlutilities.linear_algebra import *
-
-from mechanics.drive import *
-from mechanics.intercept import *
-from mechanics.dodge import *
-from mechanics.aerial import *
-
-from analysis.throttle import *
-
+from math import pi
+import time
 import csv
 import os
 
 class HeartOfGold(BaseAgent):
     def __init__(self, name, team, index):
         super().__init__(name, team, index)
-        self.active_sequence: Sequence = None
-        self.ball_predictions = []
-        self.not_hit_yet = True
         self.game = None
         self.timer = 0.0
-
-        self.intercept = None
-        self.aerial = None
-
-        self.dodge = None
-        self.dodge_started = False
-        self.dodge_start_time = None
-
-        self.start_time = None
+        self.start_time = None 
+        self.record_start_time = None
         self.start_recording = False
         self.done_recording = False
 
     def initialize_agent(self):
         print('> Alphabot: I N I T I A L I Z E D')
+        print('> Data collection mode activated')
 
     def reset_for_data_collection(self):
         self.initial_ball_location = Vector3(2000, 2000, 100)
@@ -69,7 +41,6 @@ class HeartOfGold(BaseAgent):
 
         # Initialize inputs
         self.reset_for_data_collection()
-        t = self.target
         b = Ball(self.game.ball)
         c = Car(self.game.cars[self.index])
         b.location = to_vec3(self.initial_ball_location)
@@ -82,9 +53,6 @@ class HeartOfGold(BaseAgent):
         # rotator = rotation_to_euler(c.rotation)
 
         # Reset
-        self.aerial = None
-        self.dodge = None
-        self.rotation_input = None
         self.timer = 0.0
 
         # Set gamestate
@@ -101,11 +69,11 @@ class HeartOfGold(BaseAgent):
 
         data = {}
         data['deltaTime'] = 0.008333333333333333
-        data['frames'] = self.dodge_frames
+        data['frames'] = self.replay_frames
 
         with open(os.path.join(os.path.dirname(__file__), filename), 'w') as outfile:
             json.dump(data, outfile,  indent=2)
-            print(f'Wrote {len(self.dodge_frames)} frames to {filename}')
+            print(f'Wrote {len(self.replay_frames)} frames to {filename}')
 
     def write_csv(self):
         filename = 'analysis/data/turn-right-boost.csv'
@@ -127,7 +95,7 @@ class HeartOfGold(BaseAgent):
                 #'angvel_y',
                 #'angvel_z',
             ])
-            for row in self.dodge_frames:
+            for row in self.replay_frames:
                 writer.writerow([
                     row.time,
                     row.car_pos[0],
@@ -144,7 +112,7 @@ class HeartOfGold(BaseAgent):
                     # row.car_angvel[1],
                     # row.car_angvel[2]
                 ])
-            print(f'Wrote {len(self.dodge_frames)} frames to {filename}')
+            print(f'Wrote {len(self.replay_frames)} frames to {filename}')
 
     def get_output(self, packet: GameTickPacket) -> SimpleControllerState:
         # Record start time
@@ -166,7 +134,6 @@ class HeartOfGold(BaseAgent):
             Game.set_mode('soccar')
             self.game = Game(self.index, self.team)
             self.game.read_game_information(packet, self.get_rigid_body_tick(), self.get_field_info())
-            self.target = vec3(0, 5120 + 880/2 if self.team is 0 else -(5120 + 880/2), 642.775 / 2) # Opposing net
             self.reset_gamestate()
             print('TEAM', self.team)
             return SimpleControllerState()
@@ -174,31 +141,17 @@ class HeartOfGold(BaseAgent):
         # Update simulation
         self.game.read_game_information(packet, self.get_rigid_body_tick(), self.get_field_info())
 
-        # Check for car hit ball
-        if self.last_touch_location != packet.game_ball.latest_touch.hit_location:
-            self.last_touch_location = Vec3(packet.game_ball.latest_touch.hit_location)
-            print(f'> Car hit ball')
-            self.not_hit_yet = False
-
-        if self.dodge_start_time is not None and self.game.time > self.dodge_start_time + 6.0 and not self.done_recording:
-            #self.write_csv()
-            self.write_json()
-            self.dodge_start_time = None
-            self.done_recording = True
-
-        if self.dodge is None and not self.done_recording and self.game.time > self.start_time + 1.0:
+        # Start recording (after 1s delay)
+        if not self.start_recording and not self.done_recording and self.game.time > self.start_time + 1.0:
             self.start_recording = True
-            self.dodge = True #Dodge(self.game.my_car)
-            self.dodge_start_time = self.game.time
-            self.start_time = self.game.time
-            # self.dodge.direction = vec2(1, 1)
-            # self.dodge.duration = 0.15
-            # self.dodge.delay = 0.2
-            self.dodge_frames = []
+            self.record_start_time = self.game.time
+            self.replay_frames = []
 
+        # Save each frame (including the first)
         if self.start_recording and not self.done_recording:
-            self.dodge_frames.append({
-                'time': self.game.time - self.dodge_start_time,
+            t = self.game.time - self.record_start_time
+            self.replay_frames.append({
+                'time': t,
                 'pos_x': self.game.my_car.location[0],
                 'pos_y': self.game.my_car.location[1],
                 #'pos_z': self.game.my_car.location[2],
@@ -213,9 +166,14 @@ class HeartOfGold(BaseAgent):
                 # 'angvel_y': self.game.my_car.angular_velocity[1],
                 # 'angvel_z': self.game.my_car.angular_velocity[2]
             })
-            print(self.dodge_frames[-1])
+            print(f'Recorded frame t={t}')
 
-        
+        # Write output
+        if self.start_recording and self.game.time > self.record_start_time + 6.0 and not self.done_recording:
+            self.write_json()
+            #self.write_csv()
+            self.done_recording = True
+
         # Controller state
         if reset:
             self.reset_gamestate()

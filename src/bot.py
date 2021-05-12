@@ -34,6 +34,7 @@ class DataFrame:
         self.time = time
         self.car_pos = car_pos
         self.car_vel = car_vel
+        self.car_speed = veclen(car_vel)
         self.car_rotator = car_rotator
         self.car_angvel = car_angvel
 
@@ -46,6 +47,7 @@ class HeartOfGold(BaseAgent):
         self.game = None
         self.timer = 0.0
 
+        self.intercept = None
         self.aerial = None
 
         self.dodge = None
@@ -61,8 +63,8 @@ class HeartOfGold(BaseAgent):
     def reset_for_data_collection(self):
         self.initial_ball_location = Vector3(2000, 2000, 100)
         self.initial_ball_velocity = Vector3(0, 0, 0)
-        self.initial_car_location = Vector3(0, 4000, 0)
-        self.initial_car_velocity = Vector3(0, -2500, 0)
+        self.initial_car_location = Vector3(0, 0, 0)
+        self.initial_car_velocity = Vector3(0, 0, 0)
         self.not_hit_yet = True
         self.ball_predictions = []
         self.last_dist = None
@@ -101,7 +103,7 @@ class HeartOfGold(BaseAgent):
         self.set_game_state(game_state)
 
     def write_csv(self):
-        filename = 'analysis/data/coast-reverse.csv'
+        filename = 'analysis/data/turn-throttle.csv'
         with open(os.path.join(os.path.dirname(__file__), filename), 'w', newline='') as csvfile:
             writer = csv.writer(csvfile, delimiter=',', quotechar='|', quoting=csv.QUOTE_MINIMAL)
             writer.writerow([
@@ -112,12 +114,13 @@ class HeartOfGold(BaseAgent):
                 'car_vel_x',
                 'car_vel_y',
                 'car_vel_z',
+                'car_speed',
                 'car_pitch',
                 'car_yaw',
                 'car_roll',
                 'car_angvel_x',
                 'car_angvel_y',
-                'car_angvel_z'
+                'car_angvel_z',
             ])
             for row in self.dodge_frames:
                 writer.writerow([
@@ -128,6 +131,7 @@ class HeartOfGold(BaseAgent):
                     row.car_vel[0],
                     row.car_vel[1],
                     row.car_vel[2],
+                    row.car_speed,
                     row.car_rotator[0],
                     row.car_rotator[1],
                     row.car_rotator[2],
@@ -240,7 +244,8 @@ class HeartOfGold(BaseAgent):
             return self.intercept.get_controls(my_car, self.game.my_car) #drive_at(self, my_car, self.intercept.location)
         else:
             controls = SimpleControllerState()
-            # controls.throttle = 1
+            controls.throttle = 1
+            controls.steer = 1
             # controls.boost = True
             return controls
 

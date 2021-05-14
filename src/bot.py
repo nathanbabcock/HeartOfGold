@@ -10,7 +10,8 @@ import time
 import csv
 import os
 
-OUTPUT_FILENAME = 'analysis/data/turn-left-boost.json'
+WRITE = False
+OUTPUT_FILENAME = 'analysis/data/temp.json'
 OUTPUT_FIELDS = [
     'time',
     'pos_x',
@@ -22,8 +23,8 @@ OUTPUT_FIELDS = [
 ]
 INPUT_CONTROLLER_STATE = SimpleControllerState(
     throttle=1,
-    steer=-1,
-    boost=True
+    steer=1,
+    # boost=True
 )
 RECORD_DELAY = 1.0
 RECORD_DURATION = 6.0
@@ -75,7 +76,7 @@ class HeartOfGold(BaseAgent):
 
         # Set gamestate
         car_state = CarState(boost_amount=100, 
-                     physics=Physics(location=self.initial_car_location, velocity=self.initial_car_velocity, rotation=Rotator(0,pi/2,0),
+                     physics=Physics(location=self.initial_car_location, velocity=self.initial_car_velocity, rotation=Rotator(0, 0, 0),
                      angular_velocity=Vector3(0, 0, 0)))
         ball_state = BallState(Physics(location=self.initial_ball_location, velocity=self.initial_ball_velocity, rotation=Rotator(0, 0, 0), angular_velocity=Vector3(0, 0, 0)))
         game_state = GameState(ball=ball_state, cars={self.index: car_state})
@@ -185,13 +186,14 @@ class HeartOfGold(BaseAgent):
             if 'angvel_y' in OUTPUT_FIELDS: frame['angvel_y'] = self.game.my_car.angular_velocity[1]
             if 'angvel_z' in OUTPUT_FIELDS: frame['angvel_z'] = self.game.my_car.angular_velocity[2]
 
+            print(my_car.physics.rotation)
             self.replay_frames.append(frame)
-            print(f'Recorded frame t={t}')
+            # print(f'Recorded frame t={t}')
 
         # Write output
         if self.start_recording and self.game.time > self.record_start_time + RECORD_DURATION and not self.done_recording:
-            self.write_json()
-            #self.write_csv()
+            if WRITE: self.write_json()
+            else: print ('Skipped writing output file')
             self.done_recording = True
 
         # Controller state

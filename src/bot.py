@@ -57,12 +57,6 @@ class HeartOfGold(BaseAgent):
 
         # Initialize inputs
         self.reset_for_data_collection()
-        b = Ball(self.game.ball)
-        c = Car(self.game.cars[self.index])
-        b.location = to_vec3(INPUT_BALL_LOCATION)
-        b.velocity = to_vec3(INPUT_BALL_VELOCITY)
-        c.location = to_vec3(INPUT_CAR_LOCATION)
-        c.velocity = to_vec3(INPUT_CAR_VELOCITY)
 
         # Point car at ball
         # c.rotation = look_at(vec3(b.location[0] - c.location[0], b.location[1] - c.location[1], 0), vec3(0, 0, 1))
@@ -72,11 +66,27 @@ class HeartOfGold(BaseAgent):
         self.timer = 0.0
 
         # Set gamestate
-        car_state = CarState(boost_amount=100, 
-                     physics=Physics(location=INPUT_CAR_LOCATION, velocity=INPUT_CAR_VELOCITY, rotation=INPUT_CAR_ROTATION,
-                     angular_velocity=Vector3(0, 0, 0)))
-        ball_state = BallState(Physics(location=INPUT_BALL_LOCATION, velocity=INPUT_BALL_VELOCITY, rotation=Rotator(0, 0, 0), angular_velocity=Vector3(0, 0, 0)))
-        game_state = GameState(ball=ball_state, cars={self.index: car_state})
+        car_state = CarState(
+            boost_amount=100, 
+            physics=Physics(
+                location=INPUT_CAR_LOCATION,
+                velocity=INPUT_CAR_VELOCITY,
+                rotation=INPUT_CAR_ROTATION,
+                angular_velocity=Vector3(0, 0, 0)
+            )
+        )
+        ball_state = BallState(
+            Physics(
+                location=INPUT_BALL_LOCATION,
+                velocity=INPUT_BALL_VELOCITY,
+                rotation=Rotator(0, 0, 0),
+                angular_velocity=Vector3(0, 0, 0)
+            )
+        )
+        game_state = GameState(
+            ball=ball_state,
+            cars={self.index: car_state}
+        )
         self.set_game_state(game_state)
 
     def write_json(self):
@@ -135,15 +145,6 @@ class HeartOfGold(BaseAgent):
         # Record start time
         self.tick_start = time.time()
         self.timer += 1.0 / 120.0
-
-        # Gather some information about our car and the ball
-        my_car: CarState = packet.game_cars[self.index]
-        car_location = Vec3(my_car.physics.location)
-        car_velocity = Vec3(my_car.physics.velocity)
-        car_direction = car_velocity.ang_to(Vec3(1, 0, 0)) if car_velocity.length() > 0 else 0
-        ball_location = Vec3(packet.game_ball.physics.location)
-        ball_velocity = Vec3(packet.game_ball.physics.velocity)
-        ball_direction = ball_velocity.ang_to(Vec3(1, 0, 0)) if ball_velocity.length() > 0 else 0
         reset = False
 
         # Initialize simulation game model
@@ -157,6 +158,7 @@ class HeartOfGold(BaseAgent):
 
         # Update simulation
         self.game.read_game_information(packet, self.get_rigid_body_tick(), self.get_field_info())
+        my_car: CarState = packet.game_cars[self.index]
 
         # Start recording (after 1s delay)
         if not self.start_recording and not self.done_recording and self.game.time > self.start_time + RECORD_DELAY:

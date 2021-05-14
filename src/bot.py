@@ -21,6 +21,11 @@ OUTPUT_FIELDS = [
     'speed',
     'yaw',
 ]
+INPUT_BALL_LOCATION = Vector3(2000, 2000, 100)
+INPUT_BALL_VELOCITY = Vector3(0, 0, 0)
+INPUT_CAR_LOCATION = Vector3(0, 0, 0)
+INPUT_CAR_ROTATION = Rotator(0, 0, 0)
+INPUT_CAR_VELOCITY = Vector3(0, 0, 0)
 INPUT_CONTROLLER_STATE = SimpleControllerState(
     throttle=1,
     steer=1,
@@ -44,14 +49,6 @@ class HeartOfGold(BaseAgent):
         print('> Data collection mode activated')
 
     def reset_for_data_collection(self):
-        self.initial_ball_location = Vector3(2000, 2000, 100)
-        self.initial_ball_velocity = Vector3(0, 0, 0)
-        self.initial_car_location = Vector3(0, 0, 0)
-        self.initial_car_velocity = Vector3(0, 0, 0)
-        self.not_hit_yet = True
-        self.ball_predictions = []
-        self.last_dist = None
-        self.last_touch_location = Vec3(0, 0, 0)
         self.start_time = self.game.time
         self.start_recording = False
 
@@ -62,10 +59,10 @@ class HeartOfGold(BaseAgent):
         self.reset_for_data_collection()
         b = Ball(self.game.ball)
         c = Car(self.game.cars[self.index])
-        b.location = to_vec3(self.initial_ball_location)
-        b.velocity = to_vec3(self.initial_ball_velocity)
-        c.location = to_vec3(self.initial_car_location)
-        c.velocity = to_vec3(self.initial_car_velocity)
+        b.location = to_vec3(INPUT_BALL_LOCATION)
+        b.velocity = to_vec3(INPUT_BALL_VELOCITY)
+        c.location = to_vec3(INPUT_CAR_LOCATION)
+        c.velocity = to_vec3(INPUT_CAR_VELOCITY)
 
         # Point car at ball
         # c.rotation = look_at(vec3(b.location[0] - c.location[0], b.location[1] - c.location[1], 0), vec3(0, 0, 1))
@@ -76,9 +73,9 @@ class HeartOfGold(BaseAgent):
 
         # Set gamestate
         car_state = CarState(boost_amount=100, 
-                     physics=Physics(location=self.initial_car_location, velocity=self.initial_car_velocity, rotation=Rotator(0, 0, 0),
+                     physics=Physics(location=INPUT_CAR_LOCATION, velocity=INPUT_CAR_VELOCITY, rotation=INPUT_CAR_ROTATION,
                      angular_velocity=Vector3(0, 0, 0)))
-        ball_state = BallState(Physics(location=self.initial_ball_location, velocity=self.initial_ball_velocity, rotation=Rotator(0, 0, 0), angular_velocity=Vector3(0, 0, 0)))
+        ball_state = BallState(Physics(location=INPUT_BALL_LOCATION, velocity=INPUT_BALL_VELOCITY, rotation=Rotator(0, 0, 0), angular_velocity=Vector3(0, 0, 0)))
         game_state = GameState(ball=ball_state, cars={self.index: car_state})
         self.set_game_state(game_state)
 
